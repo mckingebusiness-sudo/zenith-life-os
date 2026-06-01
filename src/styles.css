@@ -1,0 +1,51 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@theme inline {
+  --font-cairo: "Cairo", sans-serif;
+  --font-inter: "Inter", sans-serif;
+  --color-background: #030504;
+  --color-foreground: #F4F7F5;
+  --color-muted: #647067;
+  --color-muted-foreground: #A7B3AB;
+  --color-accent: #4ADE80;
+  --color-primary: #22C55E;
+  --color-border: rgba(255,255,255,0.08);
+}
+
+:root { color-scheme: dark; }
+
+html, body, #root {
+  height: 100%;
+  background: #030504;
+  color: #F4F7F5;
+  font-family: "Cairo", sans-serif;
+  overflow-x: hidden;
+}
+
+* { -webkit-font-smoothing: antialiased; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(34,197,94,0.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(34,197,94,0.45); }
+
+.glass {
+  background: rgba(10,16,13,0.62);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+
+.glass-strong {
+  background: rgba(13,20,16,0.92);
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(28px) saturate(160%);
+}
+
+.text-grad-green {
+  background: linear-gradient(135deg, #4ADE80 0%, #A7C957 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
