@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { PrintableReport } from "./PrintableReport";
+import { calculateDayProgress } from "@/lib/habitCalculations";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -42,28 +43,15 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
 
       const isFuture = d > new Date(new Date().setHours(23,59,59,999));
       
-      let completedGood = 0;
-      goodHabits.forEach(h => {
-        if (!h.freezes?.has(dateStr) && h.checkins?.has(dateStr)) completedGood++;
-      });
-      
-      let avoidedBad = 0;
-      badHabits.forEach(h => {
-        if (!h.freezes?.has(dateStr) && h.checkins?.has(dateStr)) avoidedBad++;
-      });
-
-      const totalSuccess = completedGood + avoidedBad;
-      const activeGood = goodHabits.filter(h => !h.freezes?.has(dateStr)).length;
-      const activeBad = badHabits.filter(h => !h.freezes?.has(dateStr)).length;
-      const totalItems = activeGood + activeBad;
+      const { completedGood, avoidedBad, totalSuccess, percentage } = calculateDayProgress(habits, dateStr, isFuture);
 
       result.push({
         name: `${i}`,
         dateStr,
-        الإنجاز: totalSuccess,
-        "عادات جيدة": completedGood,
-        "تجنب سيئة": avoidedBad,
-        percentage: (totalItems > 0 && !isFuture) ? Math.round((totalSuccess / totalItems) * 100) : 0
+        الإنجاز: isFuture ? null : totalSuccess,
+        "عادات جيدة": isFuture ? null : completedGood,
+        "تجنب سيئة": isFuture ? null : avoidedBad,
+        percentage: isFuture ? null : percentage
       });
     }
     return result;
@@ -214,11 +202,8 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             const dd = String(i).padStart(2, "0");
             const str = `${y}-${mm}-${dd}`;
             
-            let curGood = 0;
-            goodHabits.forEach(h => { if (!h.freezes?.has(str) && h.checkins?.has(str)) curGood++; });
-            let curAvoided = 0;
-            badHabits.forEach(h => { if (!h.freezes?.has(str) && h.checkins?.has(str)) curAvoided++; });
-            const dayScore = curGood + curAvoided;
+            const isFuture = new Date(y, m, i) > new Date(new Date().setHours(23,59,59,999));
+            const { totalSuccess: dayScore } = calculateDayProgress(habits, str, isFuture);
             
             totalScore += dayScore;
             // When calculating limited score for fair comparison, we use the realNow.getDate() as limit

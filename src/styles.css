@@ -30,23 +30,18 @@
 }
 
 .dark {
-  --bg: #0a0a0a;
+  --bg: #030504;
   --fg: #F4F7F5;
   --muted: #1A211D;
   --muted-fg: #A7B3AB;
   --accent: #4ADE80;
   --primary: #22C55E;
   --border: rgba(255,255,255,0.08);
-  --glass-bg: rgba(10,10,10,0.62);
+  --glass-bg: rgba(10,16,13,0.62);
   --glass-border: rgba(255,255,255,0.08);
-  --glass-strong-bg: rgba(10,10,10,0.92);
+  --glass-strong-bg: rgba(13,20,16,0.92);
   
   color-scheme: dark;
-}
-
-::selection {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: inherit;
 }
 
 html, body, #root {

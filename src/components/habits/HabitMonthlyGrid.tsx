@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { HabitWithStreak, HabitColor } from "@/hooks/useHabits";
+import { calculateTodayProgress, isHabitHandledToday, isHabitSuccessOnDay } from "@/lib/habitCalculations";
 import { Edit2, Trash2, Check, Flame, Award, AlertTriangle, PauseCircle, ChevronRight, ChevronLeft, Info, Trophy, Sparkles, Shield, Snowflake, Clock, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -53,11 +54,13 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   const [relapseLoading, setRelapseLoading] = useState(false);
   // Micro-journal toast
   const [journalHabitId, setJournalHabitId] = useState<string | null>(null);
+  const [journalDayLocal, setJournalDayLocal] = useState<string | null>(null);
   const [journalText, setJournalText] = useState("");
 
   const handleCheckInWithJournal = async (habitId: string, dayLocal: string) => {
     onCheckIn(habitId, dayLocal, "check");
     setJournalHabitId(habitId);
+    setJournalDayLocal(dayLocal);
     setJournalText("");
     
     try {
@@ -80,14 +83,14 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   };
 
   const saveJournal = async () => {
-    if (journalText.trim() && journalHabitId) {
+    if (journalText.trim() && journalHabitId && journalDayLocal) {
       try {
         const { data: authData } = await supabase.auth.getSession();
         if (authData.session) {
           await supabase.from("habit_journals").upsert({
             habit_id: journalHabitId,
             user_id: authData.session.user.id,
-            day_local: todayLocal,
+            day_local: journalDayLocal,
             journal_text: journalText.trim()
           }, { onConflict: 'habit_id,day_local' });
         }
@@ -96,6 +99,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
       }
     }
     setJournalHabitId(null);
+    setJournalDayLocal(null);
   };
 
   const submitRelapse = async () => {
@@ -149,18 +153,11 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   const goodHabits = habits.filter(h => h.habit_type !== 'quit');
   const badHabits = habits.filter(h => h.habit_type === 'quit');
 
-  const completedGood = goodHabits.filter(h => h.checkedToday).length;
-  const totalGood = goodHabits.length;
-  
-  const avoidedBad = badHabits.filter(h => h.checkedToday).length;
-  const totalBad = badHabits.length;
+  const {
+    completedGood, totalGood, avoidedBad, totalBad, totalHabits: totalItems, handledCount: totalSuccess, percentage: pct
+  } = useMemo(() => calculateTodayProgress(habits), [habits]);
 
-  // Total overall score
-  const totalItems = totalGood + totalBad;
-  const totalSuccess = completedGood + avoidedBad;
-  const pct = totalItems > 0 ? Math.round((totalSuccess / totalItems) * 100) : 0;
-
-  const bestStreak = Math.max(...habits.map(h => h.streak?.current_streak || 0), 0);
+  const bestStreak = Math.max(...habits.map(h => h.streak?.longest_streak || 0), 0);
 
   // Circular progress values
   const circumference = 2 * Math.PI * 40;
@@ -294,14 +291,14 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
       <div className="mb-6 flex flex-wrap items-center gap-4 text-[11px] text-[#A7B3AB] bg-white/[0.02] p-4 rounded-2xl border border-white/[0.04]">
         <div className="flex items-center gap-1.5"><Info size={13} className="text-blue-400" /> <b>دليل مبسط:</b></div>
         <div className="flex items-center gap-1.5"><Sparkles size={13} className="text-green-400" /> <b className="text-white">العادة الجيدة:</b> قم بالضغط عليها يومياً لإنجازها.</div>
-        <div className="flex items-center gap-1.5"><AlertTriangle size={13} className="text-red-400" /> <b className="text-white">العادة السيئة:</b> اضغط عليها (✓) لتأكيد أنك نجحت في تجنبها اليوم.</div>
+        <div className="flex items-center gap-1.5"><AlertTriangle size={13} className="text-red-400" /> <b className="text-white">العادة السيئة:</b> تُحتسب ناجحة تلقائياً ما لم تسجّل انتكاساً بالزر ⚠️.</div>
         <div className="flex items-center gap-1.5"><Flame size={13} className="text-orange-400" /> <b className="text-white">السلسلة:</b> عدد الأيام المتتالية التي أتممت فيها العادة بدون كسرها.</div>
       </div>
 
       {/* ─── Grid Table ─── */}
       <div className="glass rounded-3xl border border-white/[0.06] overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="min-w-[700px] w-full pb-4">
+        <div className="overflow-x-auto relative">
+          <div className="min-w-[650px] w-full pb-4">
             {/* Header Row */}
             <div className="flex items-center px-5 py-4 border-b border-white/[0.06] bg-gradient-to-r from-black/30 to-transparent">
               <div className="w-36 shrink-0 flex items-center justify-between text-xs font-bold text-[#8B9A90] tracking-wider uppercase pl-3 border-l border-white/5">
@@ -355,7 +352,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
               <div className="w-24 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
                 🔥 السلسلة
               </div>
-              <div className="w-20 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
+              <div className="w-20 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5 sticky right-0 z-20 bg-[#101411] shadow-[-8px_0_16px_-4px_rgba(0,0,0,0.4)]">
                 إجراءات
               </div>
             </div>
@@ -387,20 +384,25 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                         {habit.title}
                         {habit.habit_type === 'quit' && <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">🚫 سيئة</span>}
                       </span>
-                      {habit.checkedToday && (
-                        <span className="text-[9px] text-green-400/70">✓ تم</span>
-                      )}
+                      {habit.habit_type === 'quit' ? (
+                        habit.relapsedToday
+                          ? <span className="text-[9px] text-red-400/70">⚠️ انتكاس</span>
+                          : <span className="text-[9px] text-teal-400/70">🛡️ تم التجنب</span>
+                      ) : isHabitHandledToday(habit) ? (
+                        <span className="text-[9px] text-green-400/70">✓ {habit.frozenToday ? 'مجمّد' : 'تم'}</span>
+                      ) : null}
                     </div>
                   </div>
 
                   {/* Days Grid */}
                   <div className="flex-1 flex justify-between px-2 items-center">
                     {days.map((day) => {
-                      const isChecked = habit.checkins?.has(day.fullDate) || false;
                       const isBad = habit.habit_type === 'quit';
+                      const isRelapsed = habit.relapses?.has(day.fullDate) || false;
+                      const isChecked = isHabitSuccessOnDay(habit, day.fullDate);
                       const isFrozen = habit.freezes?.has(day.fullDate);
                       let habitColor = isBad
-                        ? (isChecked ? "#4ADE80" : "#EF4444")  // green=avoided, red=relapsed
+                        ? (isRelapsed ? "#EF4444" : "#14B8A6")
                         : (COLORS[habit.color] || "#22C55E");
                       
                       if (isFrozen) habitColor = "#60A5FA"; // Blue for frozen
@@ -410,22 +412,27 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                         <div key={day.num} className="flex items-center justify-center flex-1 h-8 relative">
                           {!day.isFuture ? (
                             <button
-                              onClick={() => isCurrentMonth && onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check")}
-                              disabled={!isCurrentMonth}
+                              onClick={() => {
+                                if (!isCurrentMonth || isBad) return;
+                                onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check");
+                              }}
+                              disabled={!isCurrentMonth || isBad}
                               className={`w-[26px] h-[26px] rounded-lg transition-all duration-300 flex items-center justify-center relative overflow-hidden ${
-                                isChecked
+                                isChecked || isRelapsed
                                   ? ''
                                   : day.isToday
                                     ? `bg-white/[0.08] ring-1 ${isBad ? 'ring-red-500/30' : 'ring-green-500/30'} hover:bg-white/[0.12]`
                                     : 'bg-white/[0.04] hover:bg-white/[0.08]'
                               } ${!isCurrentMonth && !isChecked ? 'opacity-30 cursor-default hover:bg-white/[0.04]' : ''} ${!isCurrentMonth && isChecked ? 'cursor-default' : ''}`}
-                              style={isChecked ? {
+                              style={(isChecked || isRelapsed) ? {
                                 background: `linear-gradient(135deg, ${habitColor}, ${habitColor}cc)`,
                                 boxShadow: `0 2px 10px ${habitColor}40`,
                               } : undefined}
                             >
                               {isFrozen ? (
                                 <Snowflake size={14} className="text-white drop-shadow-md relative z-10" />
+                              ) : isRelapsed ? (
+                                <AlertTriangle size={13} className="text-white drop-shadow-md relative z-10" />
                               ) : isChecked ? (
                                 <div className="text-white">
                                   {isBad
@@ -508,7 +515,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   </div>
 
                   {/* Actions — always visible (Phase 4) */}
-                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1">
+                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1 sticky right-0 z-10 bg-[#101411] shadow-[-8px_0_16px_-4px_rgba(0,0,0,0.4)]">
                     {habit.habit_type === 'quit' && isCurrentMonth && onResetStreak ? (
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -532,16 +539,8 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                             return;
                           }
                           if (habit.frozenToday) return;
-                          toast.custom((t) => (
-                            <div className="bg-[#121413] border border-white/10 p-4 rounded-xl shadow-xl max-w-sm">
-                              <h3 className="text-white font-bold mb-2">تجميد العادة؟</h3>
-                              <p className="text-[#A7B3AB] text-sm mb-4">هل تريد تجميد هذه العادة لليوم؟ لن تؤثر على تقييمك.</p>
-                              <div className="flex gap-2 justify-end">
-                                <button onClick={() => toast.dismiss(t)} className="px-3 py-1.5 text-sm rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors">إلغاء</button>
-                                <button onClick={() => { onFreeze(habit.id, todayLocal, currentMonthStr); toast.dismiss(t); }} className="px-3 py-1.5 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors">تجميد</button>
-                              </div>
-                            </div>
-                          ), { duration: Infinity });
+                          onFreeze(habit.id, todayLocal, currentMonthStr);
+                          toast.success("تم تجميد العادة لليوم بنجاح ❄️");
                         }}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                           habit.frozenToday
@@ -615,14 +614,18 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
               <span className="text-sm font-medium text-green-400">عادات تمت اليوم</span>
             </div>
             <div className="space-y-2">
-              {goodHabits.filter(h => h.checkedToday).map(h => (
+              {goodHabits.filter(h => isHabitHandledToday(h)).map(h => (
                 <div key={h.id} className="flex items-center gap-2 text-sm text-white/70">
                   <span>{h.icon}</span>
                   <span className="truncate">{h.title}</span>
-                  <Check size={12} className="text-green-400 mr-auto shrink-0" />
+                  {h.frozenToday ? (
+                    <Snowflake size={12} className="text-blue-400 mr-auto shrink-0" />
+                  ) : (
+                    <Check size={12} className="text-green-400 mr-auto shrink-0" />
+                  )}
                 </div>
               ))}
-              {goodHabits.filter(h => h.checkedToday).length === 0 && (
+              {goodHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
                 <div className="text-sm text-white/30 text-center py-2">لم تكمل أي عادة بعد</div>
               )}
             </div>
@@ -639,12 +642,12 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
             <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full mb-3">
               <Snowflake size={14} className="text-blue-400" />
               <span className="text-xs font-semibold text-blue-300">
-                رصيد الإيقاف: {3 - freezesUsed} / 3
+                رصيد الإيقاف: {Math.max(0, 3 - freezesUsed)} / 3
               </span>
             </div>
 
             <div className="space-y-2">
-              {goodHabits.filter(h => !h.checkedToday).map(h => (
+              {goodHabits.filter(h => !isHabitHandledToday(h)).map(h => (
                 <motion.div
                   key={h.id}
                   className="flex items-center gap-2 text-sm text-white/70 cursor-pointer hover:bg-white/5 rounded-lg p-1.5 -m-1.5 transition-colors"
@@ -656,7 +659,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   <span className="text-[10px] text-white/30 mr-auto shrink-0">اضغط لإتمامها</span>
                 </motion.div>
               ))}
-              {goodHabits.filter(h => !h.checkedToday).length === 0 && (
+              {goodHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
                 <div className="text-sm text-green-400/60 text-center py-2">🎉 أكملت كل العادات الجيدة!</div>
               )}
             </div>
@@ -670,14 +673,18 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                 <span className="text-sm font-medium text-teal-400">تم تجنبها اليوم</span>
               </div>
               <div className="space-y-2">
-                {badHabits.filter(h => h.checkedToday).map(h => (
+                {badHabits.filter(h => isHabitHandledToday(h)).map(h => (
                   <div key={h.id} className="flex items-center gap-2 text-sm text-white/70">
                     <span>{h.icon}</span>
                     <span className="truncate">{h.title}</span>
-                    <Shield size={12} className="text-teal-400 mr-auto shrink-0" />
+                    {h.frozenToday ? (
+                      <Snowflake size={12} className="text-blue-400 mr-auto shrink-0" />
+                    ) : (
+                      <Shield size={12} className="text-teal-400 mr-auto shrink-0" />
+                    )}
                   </div>
                 ))}
-                {badHabits.filter(h => h.checkedToday).length === 0 && (
+                {badHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
                   <div className="text-sm text-white/30 text-center py-2">لم تؤكد التجنب بعد</div>
                 )}
               </div>
@@ -692,11 +699,10 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                 <span className="text-sm font-medium text-red-400">لم يتم تجنبها</span>
               </div>
               <div className="space-y-2">
-                {badHabits.filter(h => !h.checkedToday).map(h => (
+                {badHabits.filter(h => !isHabitHandledToday(h)).map(h => (
                   <motion.div
                     key={h.id}
-                    className="flex items-center gap-2 text-sm text-white/70 cursor-pointer hover:bg-white/5 rounded-lg p-1.5 -m-1.5 transition-colors"
-                    onClick={() => handleCheckInWithJournal(h.id, todayLocal)}
+                    className="flex items-center gap-2 text-sm text-white/70 rounded-lg p-1.5 -m-1.5"
                     whileTap={{ scale: 0.98 }}
                   >
                     <span>{h.icon}</span>
@@ -704,7 +710,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                     <span className="text-[10px] text-white/30 mr-auto shrink-0">اضغط لتأكيد</span>
                   </motion.div>
                 ))}
-                {badHabits.filter(h => !h.checkedToday).length === 0 && (
+                {badHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
                   <div className="text-sm text-teal-400/60 text-center py-2">✅ تجنبت كل العادات السيئة!</div>
                 )}
               </div>
@@ -789,7 +795,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
             />
             <div className="flex gap-2">
               <button onClick={saveJournal} className="flex-1 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-bold">حفظ</button>
-              <button onClick={() => setJournalHabitId(null)} className="flex-1 py-1.5 rounded-lg bg-white/5 text-white/50 text-xs">تخطي</button>
+              <button onClick={() => { setJournalHabitId(null); setJournalDayLocal(null); }} className="flex-1 py-1.5 rounded-lg bg-white/5 text-white/50 text-xs">تخطي</button>
             </div>
           </motion.div>
         )}

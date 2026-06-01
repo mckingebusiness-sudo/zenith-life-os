@@ -4,6 +4,7 @@ import { HabitMonthlyGrid } from "@/components/habits/HabitMonthlyGrid";
 import { HabitModal } from "@/components/habits/HabitModal";
 import { HabitsAnalytics } from "@/components/habits/HabitsAnalytics";
 import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
+import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
 import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
 import { AITicker } from "@/components/habits/AITicker";
 import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw } from "lucide-react";
@@ -55,7 +56,7 @@ function HabitsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak } = useHabits(currentDate);
+  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse } = useHabits(currentDate);
   const [burst, setBurst] = useState<string | null>(null);
   const [isBlueprintsOpen, setIsBlueprintsOpen] = useState(false);
   const confettiFiredRef = useRef<string | null>(null);
@@ -111,6 +112,14 @@ function HabitsPage() {
     }
   };
 
+
+  const handleToggleRelapse = async (id: string, currentlyRelapsed: boolean) => {
+    if (currentlyRelapsed) {
+      await undoRelapse(id);
+    } else {
+      await resetStreak(id, "من الحديقة");
+    }
+  };
 
   const openAddModal = () => {
     setEditingHabit(null);
@@ -310,8 +319,13 @@ function HabitsPage() {
             />
             </div>
             <HabitsAnalytics habits={habits} currentDate={currentDate} />
-            <div className="print:hidden">
-              <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} />
+            <div className="print:hidden space-y-8">
+              <BadHabitsTracker
+                habits={habits}
+                onResetStreak={resetStreak}
+                onUndoRelapse={undoRelapse}
+              />
+              <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} onToggleRelapse={handleToggleRelapse} />
             </div>
             <div className="print:hidden">
               <AITicker habits={habits} />
