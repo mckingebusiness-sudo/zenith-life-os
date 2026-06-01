@@ -9,6 +9,7 @@ type Props = {
   onClose: () => void;
   onSave: (habit: Partial<Habit>) => Promise<void>;
   habit?: Habit | null;
+  isSaving?: boolean;
 };
 
 const COLORS: { id: HabitColor; hex: string; name: string }[] = [
@@ -38,7 +39,7 @@ const ICONS = [
   "🚗", "✈️", "🍳", "📸", "⚽", "🏀", "🏊‍♂️", "📈", "🌍", "💡"
 ];
 
-export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
+export function HabitModal({ isOpen, onClose, onSave, habit, isSaving = false }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("✨");
@@ -48,7 +49,6 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
   const [habitType, setHabitType] = useState<'good' | 'quit'>('good');
   const [savedValuePerDay, setSavedValuePerDay] = useState("");
   const [savedUnit, setSavedUnit] = useState("ساعة");
-  const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
@@ -84,7 +84,6 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    setLoading(true);
     try {
       const habitData: Record<string, unknown> = {
         title: title.trim(),
@@ -94,6 +93,14 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
         cadence,
         target_per_period: target,
         habit_type: habitType,
+        active_weekdays: [0, 1, 2, 3, 4, 5, 6],
+        grace_days: 0,
+        is_private: false,
+        is_paused: false,
+        pause_until: null,
+        tracking_type: "checkbox",
+        target_value: null,
+        target_unit: null,
       };
 
       // Add optional fields safely (only if they exist in DB schema)
@@ -109,8 +116,6 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
       console.error("Save error:", err);
       const msg = err?.message || JSON.stringify(err);
       toast.error(`خطأ في الحفظ: ${msg}`);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -129,10 +134,10 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="glass rounded-3xl w-full max-w-md overflow-hidden border border-white/10"
+            className="glass rounded-3xl w-full max-w-md overflow-hidden border border-border"
           >
             {/* Header with preview */}
-            <div className="relative p-6 border-b border-white/10 overflow-hidden">
+            <div className="relative p-6 border-b border-border overflow-hidden">
               <div
                 className="absolute inset-0 opacity-10"
                 style={{ background: `linear-gradient(135deg, ${selectedColorHex}, transparent)` }}
@@ -146,19 +151,19 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                     {icon}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">
+                    <h2 className="text-lg font-bold text-foreground">
                       {habit ? "تعديل العادة" : "عادة جديدة"}
                     </h2>
-                    <p className="text-xs text-white/50">
+                    <p className="text-xs text-foreground/50">
                       {title || "اكتب اسم العادة..."}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition"
+                  className="w-8 h-8 rounded-xl bg-foreground/5 hover:bg-foreground/10 flex items-center justify-center transition"
                 >
-                  <X size={16} className="text-white/60" />
+                  <X size={16} className="text-foreground/60" />
                 </button>
               </div>
             </div>
@@ -166,32 +171,32 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* Title */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">اسم العادة *</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">اسم العادة *</label>
                 <input
                   required
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={habitType === 'good' ? "مثال: القراءة لمدة 20 دقيقة" : "مثال: تضييع الوقت على السوشيال ميديا"}
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
+                  className="w-full bg-black/30 border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الوصف (اختياري)</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">الوصف (اختياري)</label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={habitType === 'good' ? "لماذا تريد بناء هذه العادة؟" : "لماذا تريد تجنب هذه العادة؟"}
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
+                  className="w-full bg-black/30 border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
                 />
               </div>
 
               {/* Icon */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الأيقونة</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">الأيقونة</label>
                 <div className="grid grid-cols-10 gap-1.5 max-h-28 overflow-y-auto scrollbar-thin pr-1">
                   {ICONS.map((i) => (
                     <button
@@ -201,7 +206,7 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                       className={`w-8 h-8 rounded-lg text-base flex items-center justify-center transition-all ${
                         icon === i
                           ? "bg-white/15 ring-2 ring-white/30 scale-110"
-                          : "bg-black/20 hover:bg-white/10"
+                          : "bg-black/20 hover:bg-foreground/10"
                       }`}
                     >
                       {i}
@@ -212,7 +217,7 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Color */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">اللون</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">اللون</label>
                 <div className="flex flex-wrap gap-2">
                   {COLORS.map((c) => (
                     <button
@@ -233,19 +238,19 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Habit Type Toggle */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">نوع العادة</label>
+                <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">نوع العادة</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setHabitType('good')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'good' ? 'bg-green-500/20 border-green-500/40 text-green-400' : 'bg-white/5 border-white/10 text-white/50'}`}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'good' ? 'bg-green-500/20 border-green-500/40 text-green-400' : 'bg-foreground/5 border-border text-foreground/50'}`}
                   >
                     ✅ عادة جيدة
                   </button>
                   <button
                     type="button"
                     onClick={() => setHabitType('quit')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'quit' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'quit' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-foreground/5 border-border text-foreground/50'}`}
                   >
                     🚫 عادة سيئة أتركها
                   </button>
@@ -257,7 +262,7 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-2 text-xs font-semibold text-white/60 hover:text-white transition-colors tracking-wide"
+                  className="flex items-center gap-2 text-xs font-semibold text-foreground/60 hover:text-foreground transition-colors tracking-wide"
                 >
                   <span className={`transform transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
                   {habitType === 'good' ? 'إضافة قيمة مكتسبة / وحدات (اختياري)' : 'إضافة قيمة موفرة / وحدات (اختياري)'}
@@ -273,7 +278,7 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                     >
                       <div className="flex gap-2">
                         <div className="flex-1">
-                          <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">
+                          <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">
                             {habitType === 'good' ? 'القيمة المكتسبة في كل مرة' : 'القيمة الموفرة في كل مرة'}
                           </label>
                           <input
@@ -281,15 +286,15 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                             value={savedValuePerDay}
                             onChange={(e) => setSavedValuePerDay(e.target.value)}
                             placeholder="مثال: 2"
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/20 focus:outline-none focus:border-white/30 transition"
+                            className="w-full bg-black/30 border border-border rounded-xl px-4 py-2.5 text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-white/30 transition"
                           />
                         </div>
                         <div className="w-28">
-                          <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الوحدة</label>
+                          <label className="block text-xs font-semibold text-muted-foreground mb-2 tracking-wide">الوحدة</label>
                           <select
                             value={savedUnit}
                             onChange={(e) => setSavedUnit(e.target.value)}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white/30 transition"
+                            className="w-full bg-black/30 border border-border rounded-xl px-3 py-2.5 text-foreground focus:outline-none focus:border-white/30 transition"
                           >
                             <option value="ساعة">ساعة</option>
                             <option value="جنيه">جنيه</option>
@@ -309,20 +314,20 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 px-4 py-3 rounded-xl transition font-medium"
+                  className="flex-1 bg-foreground/5 hover:bg-foreground/10 border border-border text-foreground/70 px-4 py-3 rounded-xl transition font-medium"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || !title.trim()}
-                  className="flex-1 text-white px-4 py-3 rounded-xl transition font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                  disabled={isSaving || !title.trim()}
+                  className="flex-1 text-foreground px-4 py-3 rounded-xl transition font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                   style={{
                     background: `linear-gradient(135deg, ${selectedColorHex}, ${selectedColorHex}cc)`,
                     boxShadow: `0 4px 20px ${selectedColorHex}30`,
                   }}
                 >
-                  {loading ? (
+                  {isSaving ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>

@@ -65,6 +65,11 @@ export interface UserSettings {
   updated_at: string;
 }
 
+/**
+ * @deprecated This Habit interface is from the legacy API layer (src/lib/api/habits.ts).
+ * The active habits tracker uses the Habit interface from src/hooks/useHabits.ts instead.
+ * Do NOT use this type for the habits tracker feature.
+ */
 export interface Habit {
   id: string;
   user_id: string;

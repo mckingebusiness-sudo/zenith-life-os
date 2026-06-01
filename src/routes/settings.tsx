@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useDirection } from "@/stores/useDirection";
+import { useSettings } from "@/stores/useSettings";
 import { useTranslation } from "react-i18next";
-import { Languages } from "lucide-react";
+import { Languages, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Zenith — الإعدادات" }] }),
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { dir, toggleDir } = useDirection();
+  const { enableGamification, toggleGamification } = useSettings();
   const { t } = useTranslation();
 
   return (
@@ -32,6 +34,29 @@ function SettingsPage() {
             >
               <Languages size={16} />
               {dir === "rtl" ? "Switch to English" : "التبديل للعربية"}
+            </button>
+          </div>
+        </section>
+
+        <section className="bg-card rounded-2xl p-6 border border-border">
+          <h2 className="text-lg font-bold text-foreground mb-4">التجربة البصرية والصوتية (Gamification)</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">المؤثرات التفاعلية</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                تفعيل الأصوات المريحة، والاحتفالات البصرية (Confetti)، والتأثيرات الحيوية عند إنجاز العادات.
+              </p>
+            </div>
+            <button
+              onClick={toggleGamification}
+              className={`flex items-center gap-2 px-4 py-2 transition rounded-xl font-bold text-sm ${
+                enableGamification 
+                  ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" 
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              <Sparkles size={16} />
+              {enableGamification ? "مفعل (تشغيل)" : "معطل (إيقاف)"}
             </button>
           </div>
         </section>

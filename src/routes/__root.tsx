@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/useAuth";
 import AuthPage from "@/components/AuthPage";
 import { DirectionProvider } from "@/stores/useDirection";
 import { ThemeProvider } from "@/stores/useTheme";
+import { SettingsProvider } from "@/stores/useSettings";
 import "@/lib/i18n";
 
 function NotFoundComponent() {
@@ -141,7 +142,7 @@ function AuthGate() {
           >
             ∞
           </div>
-          <p className="text-[#647067] text-sm">جاري التحميل...</p>
+          <p className="text-muted-foreground text-sm">جاري التحميل...</p>
         </div>
       </div>
     );
@@ -165,9 +166,11 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <DirectionProvider>
-          <AuthProvider>
-            <AuthGate />
-          </AuthProvider>
+          <SettingsProvider>
+            <AuthProvider>
+              <AuthGate />
+            </AuthProvider>
+          </SettingsProvider>
         </DirectionProvider>
       </ThemeProvider>
     </QueryClientProvider>

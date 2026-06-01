@@ -4,6 +4,7 @@ import { Check, Sparkles } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 import { getPlantState } from "@/components/habits/garden/plantConfig";
 import HabitPlant from "@/components/habits/garden/HabitPlant";
+import { calculateTodayProgress, isHabitHandledToday } from "@/lib/habitCalculations";
 
 export default function HabitsGarden() {
   const { habits, checkIn } = useHabits(new Date());
@@ -19,8 +20,7 @@ export default function HabitsGarden() {
     }
   };
 
-  const total = activeHabits.length;
-  const doneCount = activeHabits.filter((h) => h.checkedToday).length;
+  const { handledCount: doneCount, totalHabits: total } = calculateTodayProgress(activeHabits);
   const pct = total > 0 ? (doneCount / total) * 100 : 0;
 
   return (
@@ -93,11 +93,11 @@ export default function HabitsGarden() {
                 transition={{ delay: 0.08 * i, type: "spring", damping: 18 }}
                 whileHover={{ y: -4 }}
                 className="relative flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-muted transition cursor-pointer border border-transparent hover:border-green-500/20"
-                onClick={() => toggle(habit.id, !!habit.checkedToday)}
+                onClick={() => toggle(habit.id, isHabitHandledToday(habit))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    toggle(habit.id, !!habit.checkedToday);
+                    toggle(habit.id, isHabitHandledToday(habit));
                   }
                 }}
                 tabIndex={0}
@@ -146,16 +146,16 @@ export default function HabitsGarden() {
                 </motion.div>
                 <motion.button
                   whileTap={{ scale: 0.85 }}
-                  onClick={(e) => { e.stopPropagation(); toggle(habit.id, !!habit.checkedToday); }}
+                  onClick={(e) => { e.stopPropagation(); toggle(habit.id, isHabitHandledToday(habit)); }}
                   tabIndex={-1}
                   className={`relative w-6 h-6 rounded-full border flex items-center justify-center transition ${
-                    habit.checkedToday
+                    isHabitHandledToday(habit)
                       ? "bg-primary border-primary shadow-[0_0_14px_rgba(34,197,94,0.6)] text-primary-foreground"
                       : "border-primary/30 hover:bg-primary/10 hover:border-primary/60 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <AnimatePresence>
-                    {habit.checkedToday && (
+                    {isHabitHandledToday(habit) && (
                       <motion.span
                         initial={{ scale: 0, rotate: -90 }}
                         animate={{ scale: 1, rotate: 0 }}

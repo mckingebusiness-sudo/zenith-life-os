@@ -17,14 +17,14 @@
 :root {
   --bg: #FFFFFF;
   --fg: #000000;
-  --muted: #F5F5F5;
-  --muted-fg: #666666;
+  --muted: #F8F9FA;
+  --muted-fg: #6B7280;
   --accent: #15803D;
   --primary: #22C55E;
-  --border: rgba(0,0,0,0.1);
-  --glass-bg: rgba(255,255,255,0.7);
-  --glass-border: rgba(0,0,0,0.1);
-  --glass-strong-bg: rgba(255,255,255,0.95);
+  --border: rgba(0,0,0,0.06);
+  --glass-bg: rgba(255,255,255,0.9);
+  --glass-border: rgba(0,0,0,0.08);
+  --glass-strong-bg: rgba(255,255,255,0.98);
   
   color-scheme: light;
 }

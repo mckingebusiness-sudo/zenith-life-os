@@ -28,7 +28,7 @@ export default function TopBar() {
           <Bell size={15} />
         </button>
         <button
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-foreground"
           style={{
             background: "linear-gradient(135deg, #15803D, #22C55E)",
             boxShadow: "0 0 16px rgba(34,197,94,0.35)",
