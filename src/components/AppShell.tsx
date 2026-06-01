@@ -49,48 +49,54 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <BackgroundFX />
       <div className={`relative z-10 flex min-h-screen ${dir === "rtl" ? "flex-row-reverse" : "flex-row"}`}>
         {/* Sidebar */}
-        <Sidebar
-          collapsed={collapsed}
-          width={collapsed ? 72 : sidebarWidth}
-          onToggle={() => setCollapsed((v) => !v)}
-          onDragStart={() => (draggingSidebar.current = true)}
-        />
+        <div className="print:hidden">
+          <Sidebar
+            collapsed={collapsed}
+            width={collapsed ? 72 : sidebarWidth}
+            onToggle={() => setCollapsed((v) => !v)}
+            onDragStart={() => (draggingSidebar.current = true)}
+          />
+        </div>
 
         {/* Main */}
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar />
-          <main className="flex-1 px-8 pt-6">{children}</main>
+          <div className="print:hidden">
+            <TopBar />
+          </div>
+          <main className="flex-1 px-8 pt-6 print:p-0 print:m-0">{children}</main>
         </div>
 
         {/* AI Panel */}
-        <AIPanel
-          open={aiOpen}
-          onClose={() => setAiOpen(false)}
-          onAddHabit={async (habit) => {
-            await addHabitAsync({
-              title: habit.title,
-              icon: habit.icon,
-              color: habit.color,
-              cadence: "daily",
-              target_per_period: 1,
-              sort_order: 0,
-              habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
-            });
-          }}
-          onDeleteHabit={async (title) => {
-            // Find by title (case-insensitive) from in-memory list
-            const found = habits.find((h) =>
-              h.title.toLowerCase().includes(title.toLowerCase())
-            );
-            if (found) {
-              await deleteHabit(found.id);
-            }
-          }}
-        />
+        <div className="print:hidden">
+          <AIPanel
+            open={aiOpen}
+            onClose={() => setAiOpen(false)}
+            onAddHabit={async (habit) => {
+              await addHabitAsync({
+                title: habit.title,
+                icon: habit.icon,
+                color: habit.color,
+                cadence: "daily",
+                target_per_period: 1,
+                sort_order: 0,
+                habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
+              });
+            }}
+            onDeleteHabit={async (title) => {
+              // Find by title (case-insensitive) from in-memory list
+              const found = habits.find((h) =>
+                h.title.toLowerCase().includes(title.toLowerCase())
+              );
+              if (found) {
+                await deleteHabit(found.id);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Floating trigger */}
-      {!aiOpen && <AITrigger onClick={() => setAiOpen(true)} />}
+      {!aiOpen && <div className="print:hidden"><AITrigger onClick={() => setAiOpen(true)} /></div>}
     </div>
   );
 }

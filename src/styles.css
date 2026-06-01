@@ -5,23 +5,52 @@
 @theme inline {
   --font-cairo: "Cairo", sans-serif;
   --font-inter: "Inter", sans-serif;
-  --color-background: #030504;
-  --color-foreground: #F4F7F5;
-  --color-muted: #647067;
-  --color-muted-foreground: #A7B3AB;
-  --color-accent: #4ADE80;
-  --color-primary: #22C55E;
-  --color-border: rgba(255,255,255,0.08);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-accent: var(--accent);
+  --color-primary: var(--primary);
+  --color-border: var(--border);
 }
 
-:root { color-scheme: dark; }
+:root {
+  --bg: #FFFFFF;
+  --fg: #000000;
+  --muted: #F5F5F5;
+  --muted-fg: #666666;
+  --accent: #15803D;
+  --primary: #22C55E;
+  --border: rgba(0,0,0,0.1);
+  --glass-bg: rgba(255,255,255,0.7);
+  --glass-border: rgba(0,0,0,0.1);
+  --glass-strong-bg: rgba(255,255,255,0.95);
+  
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #030504;
+  --fg: #F4F7F5;
+  --muted: #1A211D;
+  --muted-fg: #A7B3AB;
+  --accent: #4ADE80;
+  --primary: #22C55E;
+  --border: rgba(255,255,255,0.08);
+  --glass-bg: rgba(10,16,13,0.62);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-strong-bg: rgba(13,20,16,0.92);
+  
+  color-scheme: dark;
+}
 
 html, body, #root {
   height: 100%;
-  background: #030504;
-  color: #F4F7F5;
+  background: var(--bg);
+  color: var(--fg);
   font-family: "Cairo", sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 * { -webkit-font-smoothing: antialiased; }
@@ -32,14 +61,14 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover { background: rgba(34,197,94,0.45); }
 
 .glass {
-  background: rgba(10,16,13,0.62);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   backdrop-filter: blur(20px) saturate(140%);
 }
 
 .glass-strong {
-  background: rgba(13,20,16,0.92);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: var(--glass-strong-bg);
+  border: 1px solid var(--glass-border);
   backdrop-filter: blur(28px) saturate(160%);
 }
 
@@ -48,4 +77,22 @@ html, body, #root {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+@media print {
+  html, body, #root {
+    height: auto !important;
+    background-color: white !important;
+    color: black !important;
+    overflow: visible !important;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  @page {
+    margin: 1cm;
+  }
 }

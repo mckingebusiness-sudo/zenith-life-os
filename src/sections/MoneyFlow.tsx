@@ -23,8 +23,8 @@ export default function MoneyFlow() {
         transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
       />
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-base font-bold">تدفق المال</h2>
-        <div className="text-[10px] text-[#647067]">مايو 2026</div>
+        <h2 className="text-base font-bold text-foreground">تدفق المال</h2>
+        <div className="text-[10px] text-muted-foreground">مايو 2026</div>
       </div>
       <div className="flex items-baseline gap-2 mb-1">
         <motion.span
@@ -35,9 +35,9 @@ export default function MoneyFlow() {
         >
           {hover !== null ? days[hover].amount.toLocaleString() : "3,200"}
         </motion.span>
-        <span className="text-sm text-[#A7B3AB]">ج</span>
+        <span className="text-sm text-muted-foreground">ج</span>
       </div>
-      <div className="text-[11px] text-[#647067] mb-4 h-4">
+      <div className="text-[11px] text-muted-foreground mb-4 h-4">
         {hover !== null ? days[hover].label : "من 5,000 ج · 64% مستهلك"}
       </div>
 
@@ -70,7 +70,7 @@ export default function MoneyFlow() {
         style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}
       >
         <span className="text-[#4ADE80]">✨</span>
-        <span className="text-[#A7B3AB]">معدل صرفك أقل بـ 15% من الشهر الماضي</span>
+        <span className="text-muted-foreground">معدل صرفك أقل بـ 15% من الشهر الماضي</span>
       </div>
     </section>
   );

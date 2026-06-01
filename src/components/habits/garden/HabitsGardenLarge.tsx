@@ -4,6 +4,7 @@ import { HabitWithStreak } from "@/hooks/useHabits";
 import { getPlantState } from "./plantConfig";
 import HabitPlant from "./HabitPlant";
 import { Check, Sparkles, Moon, Sun, Info, ChevronDown, ChevronUp, Flame, Leaf, Trophy, BookOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface HabitsGardenLargeProps {
   habits: HabitWithStreak[];
@@ -20,6 +21,7 @@ const PLANT_STAGES = [
 ];
 
 export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLargeProps) {
+  const { t } = useTranslation();
   const [selectedHabit, setSelectedHabit] = useState<string | null>(null);
   const [burst, setBurst] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -59,13 +61,8 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
     }
   };
 
-  // Weather based on completion
   const isSunny = pct >= 70;
-  const bgClass = isSunny
-    ? "bg-gradient-to-b from-sky-950 via-emerald-950/80 to-[#030b05]"
-    : isDay
-    ? "bg-gradient-to-b from-slate-900 to-[#022c1a]"
-    : "bg-gradient-to-b from-[#0b0f19] to-[#010a04]";
+  const bgClass = "bg-card";
 
   const isAllDone = total > 0 && doneCount === total;
   const [showCelebration, setShowCelebration] = useState(false);
@@ -81,7 +78,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
   }, [isAllDone]);
 
   return (
-    <section className={`rounded-3xl relative shadow-2xl flex flex-col transition-all duration-1000 ${bgClass} border border-white/[0.05]`}>
+    <section className={`rounded-3xl relative shadow-2xl flex flex-col transition-all duration-1000 ${bgClass} border border-border`}>
       <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none z-0">
 
       {/* All-done celebration */}
@@ -95,8 +92,8 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
           >
             <span className="text-xl">🎉</span>
             <div className="flex flex-col">
-              <span className="text-sm font-bold leading-tight">أنجزت كل عاداتك اليوم!</span>
-              <span className="text-[10px] text-white/90 leading-tight">حديقتك في ذروة ازدهارها ✨</span>
+              <span className="text-sm font-bold leading-tight">{t('habits.allDone')}</span>
+              <span className="text-[10px] text-white/90 leading-tight">{t('habits.allDoneSub')}</span>
             </div>
           </motion.div>
         )}
@@ -118,15 +115,15 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 sm:p-8 pb-4 relative z-10 gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10">
+          <div className="p-2.5 rounded-2xl bg-foreground/5 backdrop-blur-md border border-border">
             {timeIcon}
           </div>
           <div>
-            <h2 className="text-2xl font-black flex items-center gap-2">
-              حديقة العادات
-              <Sparkles size={18} className="text-[#4ADE80]" />
+            <h2 className="text-2xl font-black text-foreground flex items-center gap-2">
+              {t('habits.garden')}
+              <Sparkles size={18} className="text-primary" />
             </h2>
-            <p className="text-sm text-[#8B9A90] mt-0.5">بستانك يزدهر مع كل التزام</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{t('habits.gardenSubtitle')}</p>
           </div>
         </div>
 
@@ -134,51 +131,51 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
         <div className="flex items-center gap-4">
           {/* Mini stats */}
           <div className="hidden sm:flex items-center gap-3">
-            <div className="flex flex-col items-center p-2 rounded-xl bg-white/5 border border-white/10 min-w-[52px]">
+            <div className="flex flex-col items-center p-2 rounded-xl bg-foreground/5 border border-border min-w-[52px]">
               <Flame size={12} className="text-orange-400 mb-0.5" />
               <span className="text-xs font-black text-orange-400">{bestStreak}</span>
-              <span className="text-[9px] text-white/40">أفضل</span>
+              <span className="text-[9px] text-muted-foreground">{t('habits.best')}</span>
             </div>
-            <div className="flex flex-col items-center p-2 rounded-xl bg-white/5 border border-white/10 min-w-[52px]">
+            <div className="flex flex-col items-center p-2 rounded-xl bg-foreground/5 border border-border min-w-[52px]">
               <Trophy size={12} className="text-amber-400 mb-0.5" />
               <span className="text-xs font-black text-amber-400">{totalCheckins}</span>
-              <span className="text-[9px] text-white/40">إجمالي</span>
+              <span className="text-[9px] text-muted-foreground">{t('habits.total')}</span>
             </div>
-            <div className="flex flex-col items-center p-2 rounded-xl bg-white/5 border border-white/10 min-w-[52px]">
-              <Leaf size={12} className="text-green-400 mb-0.5" />
-              <span className="text-xs font-black text-green-400">{avgStreak}</span>
-              <span className="text-[9px] text-white/40">متوسط</span>
+            <div className="flex flex-col items-center p-2 rounded-xl bg-foreground/5 border border-border min-w-[52px]">
+              <Leaf size={12} className="text-primary mb-0.5" />
+              <span className="text-xs font-black text-primary">{avgStreak}</span>
+              <span className="text-[9px] text-muted-foreground">{t('habits.avg')}</span>
             </div>
           </div>
 
           {/* Progress bar */}
           <div className="flex flex-col items-end gap-1.5">
-            <div className="text-sm font-bold">
-              <span className="text-[#4ADE80]">{doneCount}</span>
-              <span className="text-white/40"> / {total} ازدهر اليوم</span>
+            <div className="text-sm font-bold text-foreground">
+              <span className="text-primary">{doneCount}</span>
+              <span className="text-muted-foreground"> / {total} {t('habits.bloomedToday')}</span>
             </div>
-            <div className="w-40 h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="w-40 h-2 rounded-full bg-foreground/10 overflow-hidden">
               <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-[#15803D] to-[#4ADE80]"
-                style={{ boxShadow: "0 0 12px rgba(74,222,128,0.6)" }}
+                className="h-full rounded-full bg-primary"
+                style={{ boxShadow: "0 0 12px rgba(34,197,94,0.6)" }}
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
                 transition={{ type: "spring", damping: 22 }}
               />
             </div>
-            <span className="text-[10px] text-white/40">{Math.round(pct)}% إنجاز</span>
+            <span className="text-[10px] text-muted-foreground">{Math.round(pct)}{t('habits.progress')}</span>
           </div>
         </div>
       </div>
 
       {/* ─── Plants Grid ─── */}
       {activeHabits.length === 0 ? (
-        <div className="text-center py-16 relative z-10 text-white/40 flex flex-col items-center gap-3">
-          <Leaf size={40} className="text-green-400/30" />
-          <p>لا توجد عادات بعد — ابدأ بإضافة عادتك الأولى!</p>
+        <div className="text-center py-16 relative z-10 text-muted-foreground flex flex-col items-center gap-3">
+          <Leaf size={40} className="text-primary/30" />
+          <p>{t('habits.emptyGarden')}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-5 sm:gap-7 relative z-10 px-6 sm:px-8 pb-6 mt-2">
+        <div className="flex overflow-x-auto overflow-y-hidden gap-5 sm:gap-7 relative z-10 px-6 sm:px-8 pb-6 mt-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
           {activeHabits.map((habit, i) => {
             const state = getPlantState(
               habit.streak?.current_streak || 0,
@@ -194,7 +191,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.04 * i, type: "spring", stiffness: 160, damping: 20 }}
-                className={`relative flex flex-col items-center gap-2.5 p-3 rounded-2xl transition hover:bg-white/[0.06] cursor-pointer group ${isSelected ? 'z-50' : 'z-10'}`}
+                className={`min-w-[100px] flex-shrink-0 relative flex flex-col items-center gap-2.5 p-3 rounded-2xl transition hover:bg-foreground/5 cursor-pointer group ${isSelected ? 'z-50' : 'z-10'}`}
               >
                 {/* Tooltip (Elegant Cloud) */}
                 <AnimatePresence>
@@ -203,29 +200,29 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                       initial={{ opacity: 0, y: -12, scale: 0.88 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -6, scale: 0.9 }}
-                      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-44 bg-white rounded-2xl p-3 shadow-xl z-50 pointer-events-none text-slate-800"
+                      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-44 bg-card rounded-2xl p-3 shadow-xl z-50 pointer-events-none text-foreground border border-border"
                     >
                       {/* Tiny arrow pointing up */}
-                      <div className="absolute bottom-[98%] left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45 rounded-[2px]" />
+                      <div className="absolute bottom-[98%] left-1/2 -translate-x-1/2 w-3 h-3 bg-card border-t border-l border-border rotate-45 rounded-[2px]" />
                       
-                      <div className="text-xs text-center font-black mb-2 text-slate-900 border-b border-slate-100 pb-2 truncate">{habit.title}</div>
-                      <div className="grid grid-cols-2 gap-x-1 gap-y-2 text-[10px] mb-2 border-b border-slate-100 pb-2">
-                        <div className="text-slate-500">السلسلة <span className="text-orange-500 font-bold">{habit.streak?.current_streak || 0}د</span></div>
-                        <div className="text-slate-500">الأطول <span className="text-amber-500 font-bold">{habit.streak?.longest_streak || 0}د</span></div>
-                        <div className="text-slate-500">المجموع <span className="text-emerald-600 font-bold">{habit.streak?.total_checkins || 0}</span></div>
-                        <div className="text-slate-500">المرحلة <span className="text-blue-500 font-bold">{state.currentLevel}/6</span></div>
+                      <div className="text-xs text-center font-black mb-2 border-b border-border pb-2 truncate">{habit.title}</div>
+                      <div className="grid grid-cols-2 gap-x-1 gap-y-2 text-[10px] mb-2 border-b border-border pb-2">
+                        <div className="text-muted-foreground">{t('habits.streak')} <span className="text-orange-500 font-bold">{habit.streak?.current_streak || 0}{t('habits.days')}</span></div>
+                        <div className="text-muted-foreground">{t('habits.longest')} <span className="text-amber-500 font-bold">{habit.streak?.longest_streak || 0}{t('habits.days')}</span></div>
+                        <div className="text-muted-foreground">{t('habits.total')} <span className="text-primary font-bold">{habit.streak?.total_checkins || 0}</span></div>
+                        <div className="text-muted-foreground">{t('habits.level')} <span className="text-blue-500 font-bold">{state.currentLevel}/6</span></div>
                       </div>
                       {state.isDormant ? (
                         <div className="text-[10px] text-orange-500 font-bold text-center flex items-center justify-center gap-1">
-                          <Moon size={10} className="fill-orange-500" /> نبتة خاملة
+                          <Moon size={10} className="fill-orange-500" /> {t('habits.dormantPlant')}
                         </div>
                       ) : state.currentLevel < 6 ? (
-                        <div className="text-[10px] text-center text-emerald-600 font-bold">
-                          ⏳ باقي <span className="text-emerald-700">{state.daysToNext}</span> يوم للنمو
+                        <div className="text-[10px] text-center text-primary font-bold">
+                          ⏳ {t('habits.daysToGrow', { days: state.daysToNext })}
                         </div>
                       ) : (
                         <div className="text-[10px] text-center text-amber-500 font-bold flex justify-center items-center gap-1">
-                          <Sparkles size={10} className="fill-amber-500" /> وصلت أعلى مرحلة!
+                          <Sparkles size={10} className="fill-amber-500" /> {t('habits.maxLevel')}
                         </div>
                       )}
                     </motion.div>
@@ -235,9 +232,9 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                 {/* Plant — BIGGER */}
                 <div
                   className="relative"
-                  onClick={() => handlePlantClick(habit.id, habit.checkedToday)}
+                  onClick={() => handlePlantClick(habit.id, !!habit.checkedToday)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlantClick(habit.id, habit.checkedToday); }
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlantClick(habit.id, !!habit.checkedToday); }
                   }}
                   tabIndex={0}
                   role="button"
@@ -278,7 +275,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                 </div>
 
                 {/* Habit name */}
-                <div className="text-[10px] text-[#A7B3AB] text-center truncate w-full px-1 leading-snug" title={habit.title}>
+                <div className="text-[10px] text-muted-foreground text-center truncate w-full px-1 leading-snug" title={habit.title}>
                   {habit.icon} {habit.title}
                 </div>
 
@@ -292,12 +289,12 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                 {/* Check button */}
                 <motion.button
                   whileTap={{ scale: 0.82 }}
-                  onClick={(e) => handleActionClick(e, habit.id, habit.checkedToday)}
+                  onClick={(e) => handleActionClick(e, habit.id, !!habit.checkedToday)}
                   aria-label={habit.checkedToday ? `إلغاء ${habit.title}` : `إنجاز ${habit.title}`}
                   className={`relative w-7 h-7 rounded-full flex items-center justify-center transition border shadow-lg ${
                     habit.checkedToday
-                      ? "bg-gradient-to-br from-[#15803D] to-[#4ADE80] border-green-400 shadow-[0_0_14px_rgba(74,222,128,0.5)]"
-                      : "border-white/20 hover:bg-white/10 hover:border-white/40"
+                      ? "bg-primary border-primary shadow-[0_0_14px_rgba(34,197,94,0.5)] text-primary-foreground"
+                      : "border-border hover:bg-foreground/10 hover:border-border text-muted-foreground"
                   }`}
                 >
                   <AnimatePresence>
@@ -307,7 +304,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                         animate={{ scale: 1, rotate: 0 }}
                         exit={{ scale: 0 }}
                       >
-                        <Check size={13} strokeWidth={3} className="text-white" />
+                        <Check size={13} strokeWidth={3} />
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -319,17 +316,17 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
       )}
 
       {/* ─── Instructions Panel ─── */}
-      <div className="relative z-10 border-t border-white/[0.07] mt-2">
+      <div className="relative z-10 border-t border-border mt-2">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
-          className="w-full flex items-center justify-between px-6 sm:px-8 py-4 hover:bg-white/[0.03] transition group"
+          className="w-full flex items-center justify-between px-6 sm:px-8 py-4 hover:bg-foreground/5 transition group"
         >
-          <div className="flex items-center gap-2 text-white/50 group-hover:text-white/70 transition">
+          <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground transition">
             <BookOpen size={14} />
-            <span className="text-xs font-medium">كيف تعمل الحديقة؟ — دليل مراحل النمو</span>
+            <span className="text-xs font-medium">{t('habits.guide')}</span>
           </div>
           <motion.div animate={{ rotate: showInstructions ? 180 : 0 }} transition={{ duration: 0.25 }}>
-            <ChevronDown size={14} className="text-white/30" />
+            <ChevronDown size={14} className="text-muted-foreground" />
           </motion.div>
         </button>
 
@@ -343,9 +340,8 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
               className="overflow-hidden"
             >
               <div className="px-6 sm:px-8 pb-7 pt-3">
-                <p className="text-xs text-white/50 mb-5 leading-relaxed">
-                  كل عادة في حديقتك تُمثَّل كنبتة حقيقية تنمو مع استمرار الـ streak الخاص بك.
-                  كلما أطلت السلسلة، كلما أصبحت النبتة أكبر وأجمل. الحديقة تعكس التزامك الحقيقي!
+                <p className="text-xs text-muted-foreground mb-5 leading-relaxed">
+                  {t('habits.guideDesc')}
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   {PLANT_STAGES.map((stage, i) => (
@@ -354,28 +350,28 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.06 }}
-                      className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] text-center hover:bg-white/[0.07] transition"
+                      className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-foreground/5 border border-border text-center hover:bg-foreground/10 transition"
                     >
                       <span className="text-3xl">{stage.emoji}</span>
-                      <div className="text-[10px] font-bold text-green-400">{stage.name}</div>
-                      <div className="text-[9px] text-orange-400/80 font-medium">{stage.range}</div>
-                      <div className="text-[9px] text-white/40 leading-tight">{stage.desc}</div>
+                      <div className="text-[10px] font-bold text-primary">{t(stage.name as any, stage.name)}</div>
+                      <div className="text-[9px] text-orange-500 font-medium">{stage.range}</div>
+                      <div className="text-[9px] text-muted-foreground leading-tight">{t(stage.desc as any, stage.desc)}</div>
                     </motion.div>
                   ))}
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-                    <div className="text-[10px] font-bold text-yellow-400 mb-1">💡 نصيحة</div>
-                    <p className="text-[9px] text-white/50 leading-relaxed">اضغط على النبتة لإتمام العادة مباشرة، أو على الدائرة الخضراء في الأسفل.</p>
+                  <div className="p-3 rounded-xl bg-foreground/5 border border-border">
+                    <div className="text-[10px] font-bold text-yellow-500 mb-1">💡 {t('habits.tip')}</div>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">{t('habits.tipDesc')}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-                    <div className="text-[10px] font-bold text-red-400 mb-1">🌧️ الطقس الداكن</div>
-                    <p className="text-[9px] text-white/50 leading-relaxed">الحديقة تبدو داكنة لأن إنجازك اليوم أقل من 70%. أكمل المزيد لترى السماء تصفو!</p>
+                  <div className="p-3 rounded-xl bg-foreground/5 border border-border">
+                    <div className="text-[10px] font-bold text-red-500 mb-1">🌧️ {t('habits.darkWeather')}</div>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">{t('habits.darkWeatherDesc')}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-                    <div className="text-[10px] font-bold text-blue-400 mb-1">💤 نبتة خاملة</div>
-                    <p className="text-[9px] text-white/50 leading-relaxed">النبتة الخاملة تعني أن عدادها صفر — عُد إليها وأحييها بإتمام العادة اليوم!</p>
+                  <div className="p-3 rounded-xl bg-foreground/5 border border-border">
+                    <div className="text-[10px] font-bold text-blue-500 mb-1">💤 {t('habits.dormantPlant')}</div>
+                    <p className="text-[9px] text-muted-foreground leading-relaxed">{t('habits.dormantPlantDesc')}</p>
                   </div>
                 </div>
               </div>

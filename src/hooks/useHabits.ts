@@ -4,48 +4,8 @@ import { toast } from "sonner";
 
 const KEY = ["habits"];
 
-// ─── localStorage fallback for columns that may not exist in DB ────────────
-const LS_HABIT_META = "zenith_habit_meta";
-
-function loadHabitMeta(): Record<string, { habit_type?: string; saved_value_per_day?: number; saved_unit?: string }> {
-  try { return JSON.parse(localStorage.getItem(LS_HABIT_META) || "{}"); } catch { return {}; }
-}
-function saveHabitMetaField(id: string, fields: { habit_type?: string; saved_value_per_day?: number; saved_unit?: string }) {
-  const meta = loadHabitMeta();
-  meta[id] = { ...(meta[id] || {}), ...fields };
-  localStorage.setItem(LS_HABIT_META, JSON.stringify(meta));
-}
-function deleteHabitMeta(id: string) {
-  const meta = loadHabitMeta();
-  delete meta[id];
-  localStorage.setItem(LS_HABIT_META, JSON.stringify(meta));
-}
-
-// ─── localStorage fallback for freezes ────────────
-const LS_HABIT_FREEZES = "zenith_habit_freezes";
-const getHabitFreezes = (): Record<string, string[]> => {
-  try { return JSON.parse(localStorage.getItem(LS_HABIT_FREEZES) || "{}"); } catch { return {}; }
-};
-const setHabitFreezes = (data: Record<string, string[]>) => {
-  localStorage.setItem(LS_HABIT_FREEZES, JSON.stringify(data));
-};
-export const getMonthlyFreezeCount = (monthStr: string): number => {
-  const freezes = getHabitFreezes();
-  let count = 0;
-  Object.values(freezes).forEach(days => {
-    count += days.filter(d => d.startsWith(monthStr)).length;
-  });
-  return count;
-};
-const freezeHabitDay = (habitId: string, dateStr: string, monthStr: string) => {
-  if (getMonthlyFreezeCount(monthStr) >= 3) return; // limit 3
-  const freezes = getHabitFreezes();
-  if (!freezes[habitId]) freezes[habitId] = [];
-  if (!freezes[habitId].includes(dateStr)) {
-    freezes[habitId].push(dateStr);
-    setHabitFreezes(freezes);
-  }
-};
+// Freezes are now tracked via 'habit_freezes' table in Supabase.
+// Relapse logs are now tracked via 'habit_relapses' table in Supabase.
 
 
 export type HabitCadence = "daily" | "weekly" | "monthly" | "times_per_week";
@@ -97,59 +57,18 @@ export interface HabitWithStreak extends Habit {
 
 const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// Cache whether the habits table has certain optional columns (persist across reloads)
-const getColCache = (col: string): boolean | null => {
-  try {
-    const val = sessionStorage.getItem(`zenith_col_${col}`);
-    if (val === 'true') return true;
-    if (val === 'false') return false;
-  } catch {}
-  return null;
-};
-const setColCache = (col: string, val: boolean) => {
-  try { sessionStorage.setItem(`zenith_col_${col}`, String(val)); } catch {}
-  colCacheState[col] = val;
-};
-const colCacheState: Record<string, boolean | null> = {
-  is_deleted: getColCache('is_deleted'),
-};
-
 async function fetchHabits(year: number, month: number): Promise<HabitWithStreak[]> {
   const { data: authData } = await supabase.auth.getSession();
   if (!authData.session) throw new Error("Not logged in");
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
 
-  // Build query – don't filter on is_deleted if we know the column doesn't exist
-  let query = supabase
+  // Build query – DB has all columns now
+  const { data: habits, error: habitsError } = await supabase
     .from("habits")
-    .select("*, streak:habit_streaks(*)");
-
-  if (colCacheState.is_deleted !== false) {
-    // Try with filter; if column doesn't exist we'll get an error and cache that
-    query = query.or("is_deleted.eq.false,is_deleted.is.null") as any;
-  }
-
-  let { data: habits, error: habitsError } = await (query.order("sort_order") as any);
-
-  // Detect "column not found" → cache the result and retry without filter
-  if (
-    habitsError &&
-    (habitsError.code === "42703" ||
-      habitsError.message?.toLowerCase().includes("is_deleted") ||
-      habitsError.message?.toLowerCase().includes("column"))
-  ) {
-    setColCache('is_deleted', false);
-    console.warn("is_deleted column not in schema, loading without filter");
-    const { data: d2, error: e2 } = await supabase
-      .from("habits")
-      .select("*, streak:habit_streaks(*)")
-      .order("sort_order");
-    habits = d2;
-    habitsError = e2;
-  } else if (!habitsError) {
-    setColCache('is_deleted', true);
-  }
+    .select("*, streak:habit_streaks(*)")
+    .or("is_deleted.eq.false,is_deleted.is.null")
+    .order("sort_order");
 
   if (habitsError) throw habitsError;
 
@@ -172,18 +91,27 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
     checkinsByHabit.get(c.habit_id)!.add(c.day_local);
   });
 
-  const freezesData = getHabitFreezes();
+  // Fetch freezes — column is 'freeze_day' in DB (not 'day_local')
+  const { data: recentFreezes } = await supabase
+    .from("habit_freezes")
+    .select("habit_id, freeze_day")
+    .gte("freeze_day", startStr)
+    .lte("freeze_day", endStr);
+
+  const freezesByHabit = new Map<string, Set<string>>();
+  recentFreezes?.forEach((f) => {
+    if (!freezesByHabit.has(f.habit_id)) freezesByHabit.set(f.habit_id, new Set());
+    // freeze_day comes as a date string like '2026-06-01'
+    const dayStr = typeof f.freeze_day === 'string' ? f.freeze_day : String(f.freeze_day);
+    freezesByHabit.get(f.habit_id)!.add(dayStr);
+  });
 
   return (habits || []).map((h: any) => {
     const habitCheckins = checkinsByHabit.get(h.id) || new Set<string>();
-    const habitFreezes = new Set(freezesData[h.id] || []);
-    // Merge localStorage meta (habit_type, saved_value_per_day etc.) if not in DB
-    const meta = loadHabitMeta()[h.id] || {};
+    const habitFreezes = freezesByHabit.get(h.id) || new Set<string>();
     return {
       ...h,
-      habit_type: h.habit_type ?? meta.habit_type ?? 'good',
-      saved_value_per_day: h.saved_value_per_day ?? meta.saved_value_per_day,
-      saved_unit: h.saved_unit ?? meta.saved_unit,
+      habit_type: h.habit_type || 'good',
       streak: h.streak?.[0] || { current_streak: 0, longest_streak: 0, total_checkins: 0 },
       checkins: habitCheckins,
       freezes: habitFreezes,
@@ -193,101 +121,11 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   });
 }
 
-// Safe insert: tries with optional fields, falls back to core-only on column error
-async function safeInsertHabit(
-  coreFields: Record<string, unknown>,
-  optionalFields: Record<string, unknown>
-) {
-  const { data, error } = await supabase
-    .from("habits")
-    .insert({ ...coreFields, ...optionalFields })
-    .select()
-    .maybeSingle();
 
-  if (!error) {
-    // Always persist optional meta to localStorage as backup
-    if (data?.id) {
-      saveHabitMetaField(data.id, {
-        habit_type: String(optionalFields.habit_type || coreFields.habit_type || 'good'),
-        saved_value_per_day: optionalFields.saved_value_per_day as number | undefined,
-        saved_unit: optionalFields.saved_unit as string | undefined,
-      });
-    }
-    return data;
-  }
 
-  const isColError =
-    error.code === "42703" ||
-    error.code === "PGRST204" ||
-    error.message?.toLowerCase().includes("column") ||
-    error.message?.toLowerCase().includes("does not exist");
-
-  if (isColError && Object.keys(optionalFields).length > 0) {
-    console.warn("Optional columns not supported, retrying with core fields:", error.message);
-    const { data: d2, error: e2 } = await supabase
-      .from("habits")
-      .insert(coreFields)
-      .select()
-      .maybeSingle();
-    if (e2) throw e2;
-    // Save to localStorage since DB doesn't have the column
-    if (d2?.id) {
-      saveHabitMetaField(d2.id, {
-        habit_type: String(optionalFields.habit_type || 'good'),
-        saved_value_per_day: optionalFields.saved_value_per_day as number | undefined,
-        saved_unit: optionalFields.saved_unit as string | undefined,
-      });
-    }
-    return d2;
-  }
-
-  throw error;
-}
-
-// Safe update: tries with all fields, falls back to core-only on column error
-async function safeUpdateHabit(id: string, updates: Record<string, unknown>) {
-  const { habit_type, saved_value_per_day, saved_unit, is_deleted, ...coreUpdates } = updates as any;
-  const optionalUpdates: Record<string, unknown> = {};
-  if (habit_type !== undefined) optionalUpdates.habit_type = habit_type;
-  if (saved_value_per_day !== undefined) optionalUpdates.saved_value_per_day = saved_value_per_day;
-  if (saved_unit !== undefined) optionalUpdates.saved_unit = saved_unit;
-
-  // Always save to localStorage first (as backup)
-  const metaToSave: { habit_type?: string; saved_value_per_day?: number; saved_unit?: string } = {};
-  if (habit_type !== undefined) metaToSave.habit_type = String(habit_type);
-  if (saved_value_per_day !== undefined) metaToSave.saved_value_per_day = Number(saved_value_per_day);
-  if (saved_unit !== undefined) metaToSave.saved_unit = String(saved_unit);
-  if (Object.keys(metaToSave).length > 0) saveHabitMetaField(id, metaToSave);
-
-  const { data, error } = await supabase
-    .from("habits")
-    .update({ ...coreUpdates, ...optionalUpdates })
-    .eq("id", id)
-    .select()
-    .maybeSingle(); // use maybeSingle to avoid PGRST116 errors
-
-  if (!error) return data;
-
-  const isColError =
-    error.code === "42703" ||
-    error.code === "PGRST204" ||
-    error.message?.toLowerCase().includes("column") ||
-    error.message?.toLowerCase().includes("does not exist");
-
-  if (isColError && Object.keys(optionalUpdates).length > 0) {
-    console.warn("Optional update columns not supported, retrying with core fields:", error.message);
-    const { data: d2, error: e2 } = await supabase
-      .from("habits")
-      .update(coreUpdates)
-      .eq("id", id)
-      .select()
-      .maybeSingle();
-    if (e2) throw e2;
-    return d2;
-  }
-
-  throw error;
-}
+// ─── Streak recalculation in DB ───────────────────────────────────────────────
+// Streaks are now automatically updated via PostgreSQL triggers in Supabase
+// (See streak_trigger.sql artifact)
 
 export function useHabits(currentDate: Date = new Date()) {
   const qc = useQueryClient();
@@ -300,11 +138,13 @@ export function useHabits(currentDate: Date = new Date()) {
   const query = useQuery({
     queryKey,
     queryFn: () => fetchHabits(year, month - 1), // fetchHabits still expects 0-indexed
-    staleTime: 10000,   // 10s — stays reasonably fresh
+    staleTime: 60000,   // 60s — reduces unnecessary refetches/flashes
+    gcTime: 300000,     // 5 min — keep cached data longer
     retry: 0,           // ← NO retry on error – prevents infinite reload
     networkMode: 'always',
     placeholderData: keepPreviousData,
   });
+
 
   const checkIn = useMutation({
     mutationFn: async ({ id, dayLocal, action = "check" }: { id: string; dayLocal?: string; action?: "check" | "uncheck" }) => {
@@ -329,7 +169,14 @@ export function useHabits(currentDate: Date = new Date()) {
         if (error) throw error;
       }
 
-      return { success: true };
+      // ✅ Fetch streak recalculated by Supabase Trigger
+      const { data: streakData } = await supabase
+        .from("habit_streaks")
+        .select("*")
+        .eq("habit_id", id)
+        .single();
+        
+      return { id, streakData: streakData || { current_streak: 0, longest_streak: 0, total_checkins: 0 } };
     },
     onMutate: async ({ id, dayLocal, action = "check" }) => {
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
@@ -345,6 +192,7 @@ export function useHabits(currentDate: Date = new Date()) {
             if (action === "check") newCheckins.add(targetDay);
             else newCheckins.delete(targetDay);
 
+            // Optimistic streak update (will be corrected by onSuccess)
             let newStreakCount = h.streak?.current_streak || 0;
             let newTotal = h.streak?.total_checkins || 0;
             if (targetDay === today) {
@@ -373,11 +221,35 @@ export function useHabits(currentDate: Date = new Date()) {
       });
       return { prev };
     },
+    onSuccess: ({ id, streakData }) => {
+      // ✅ FIXED: Update cache with REAL streak from DB — no more revert after refresh
+      qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
+        if (!old) return old;
+        return old.map((h) => {
+          if (h.id === id) {
+            const sd = streakData as any;
+            return {
+              ...h,
+              streak: {
+                ...h.streak!,
+                current_streak: sd.current_streak,
+                longest_streak: sd.longest_streak,
+                total_checkins: sd.total_checkins,
+                last_checkin_day: sd.last_checkin_day ?? h.streak?.last_checkin_day ?? null,
+                computed_at: sd.computed_at ?? new Date().toISOString(),
+              },
+            };
+          }
+          return h;
+        });
+      });
+    },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
+    // ✅ FIXED: Only invalidate the current month, not all months
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -388,7 +260,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (!authData.session) throw new Error("Not logged in");
       const userId = authData.session.user.id;
 
-      const coreFields: Record<string, unknown> = {
+      const newHabitPayload: Record<string, unknown> = {
         title: habit.title,
         description: habit.description ?? null,
         icon: habit.icon ?? "✨",
@@ -400,30 +272,28 @@ export function useHabits(currentDate: Date = new Date()) {
         is_private: habit.is_private ?? false,
         sort_order: habit.sort_order ?? 0,
         user_id: userId,
-      };
-
-      // is_deleted is optional — if column missing in DB, safeInsertHabit will retry without it
-      const optionalFields: Record<string, unknown> = {
         is_deleted: false,
+        habit_type: (habit as any).habit_type || 'good',
+        saved_value_per_day: (habit as any).saved_value_per_day,
+        saved_unit: (habit as any).saved_unit
       };
-      if ((habit as any).habit_type) optionalFields.habit_type = (habit as any).habit_type;
-      if ((habit as any).saved_value_per_day != null) optionalFields.saved_value_per_day = (habit as any).saved_value_per_day;
-      if ((habit as any).saved_unit) optionalFields.saved_unit = (habit as any).saved_unit;
 
-      // 10 second timeout to prevent infinite loading
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('انتهت مدة الانتظار — تحقق من اتصالك بالإنترنت')), 10000)
-      );
-      const result = await Promise.race([safeInsertHabit(coreFields, optionalFields), timeoutPromise]);
-      if (!result?.id) throw new Error('لم يتم حفظ العادة — حاول مرة أخرى');
-      return result;
+      const { data, error } = await supabase
+        .from("habits")
+        .insert(newHabitPayload)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
     },
     onMutate: async (newHabit) => {
       await qc.cancelQueries({ queryKey });
       const previousHabits = qc.getQueryData<HabitWithStreak[]>(queryKey);
 
+      const optimisticId = `optimistic-${Date.now()}`;
       const optimisticHabit: HabitWithStreak = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         title: newHabit.title || "",
         description: newHabit.description || null,
         icon: newHabit.icon || "✨",
@@ -441,7 +311,7 @@ export function useHabits(currentDate: Date = new Date()) {
         freezes: new Set(),
         frozenToday: false,
         streak: {
-          habit_id: "optimistic",
+          habit_id: optimisticId,
           user_id: "optimistic",
           current_streak: 0,
           longest_streak: 0,
@@ -455,19 +325,19 @@ export function useHabits(currentDate: Date = new Date()) {
         return old ? [...old, optimisticHabit] : [optimisticHabit];
       });
 
-      return { previousHabits };
+      return { previousHabits, optimisticId };
     },
     onSuccess: (data, _newHabit, context) => {
       // Replace the optimistic entry with the real DB row if we got one
-      if (data?.id) {
+      if (data?.id && context?.optimisticId) {
         qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
           if (!old) return old;
           return old.map((h) => {
-            if (h.id.startsWith('optimistic-')) {
+            if (h.id === context.optimisticId) {
               return {
                 ...h,
                 id: data.id,
-                user_id: data.user_id,
+                user_id: data.user_id || h.user_id,
                 sort_order: data.sort_order ?? h.sort_order,
               };
             }
@@ -483,18 +353,24 @@ export function useHabits(currentDate: Date = new Date()) {
       }
       toast.error("فشل حفظ العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
+    // ✅ FIXED: Only invalidate the current month query, not ALL months
     onSettled: () => {
-      // Force a fresh fetch from the server for all habit queries
-      qc.invalidateQueries({ queryKey: KEY, refetchType: 'active' });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
+
   const updateHabit = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Habit> }) => {
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('انتهت مدة الانتظار — تحقق من اتصالك بالإنترنت')), 10000)
-      );
-      return Promise.race([safeUpdateHabit(id, updates as Record<string, unknown>), timeoutPromise]);
+      const { data, error } = await supabase
+        .from("habits")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
     },
     onMutate: async ({ id, updates }) => {
       await qc.cancelQueries({ queryKey });
@@ -514,40 +390,18 @@ export function useHabits(currentDate: Date = new Date()) {
       toast.error("فشل تعديل العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
     onSettled: () => {
-      // Force fresh fetch for all habit queries
-      qc.invalidateQueries({ queryKey: KEY, refetchType: 'active' });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
 
   const deleteHabit = useMutation({
     mutationFn: async (id: string) => {
-      // Try soft delete first
-      if (colCacheState.is_deleted !== false) {
-        const { error } = await supabase
-          .from("habits")
-          .update({ is_deleted: true })
-          .eq("id", id);
-
-        if (!error) return;
-
-        const isColError =
-          error.code === "42703" ||
-          error.message?.toLowerCase().includes("is_deleted") ||
-          error.message?.toLowerCase().includes("column");
-
-        if (isColError) {
-          setColCache('is_deleted', false);
-          // Hard delete
-          const { error: e2 } = await supabase.from("habits").delete().eq("id", id);
-          if (e2) throw e2;
-          return;
-        }
-        throw error;
-      }
-
-      // Hard delete (is_deleted column confirmed absent)
-      const { error } = await supabase.from("habits").delete().eq("id", id);
+      // Soft delete
+      const { error } = await supabase
+        .from("habits")
+        .update({ is_deleted: true })
+        .eq("id", id);
       if (error) throw error;
     },
     onMutate: async (id) => {
@@ -562,26 +416,61 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY, refetchType: 'active' });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
 
-    const freezeHabit = useMutation({
+  const undeleteHabit = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("habits")
+        .update({ is_deleted: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey });
+      const previous = qc.getQueryData<HabitWithStreak[]>(queryKey);
+      // It's hard to optimistically restore because it's no longer in the cache,
+      // but we will just let onSettled refetch.
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey });
+    },
+    retry: 0,
+  });
+
+  const freezeHabit = useMutation({
     mutationFn: async ({ id, dateStr, monthStr }: { id: string, dateStr: string, monthStr: string }) => {
-      freezeHabitDay(id, dateStr, monthStr);
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Not logged in");
+      const userId = authData.session.user.id;
+      
+      // ✅ FIXED: DB column is 'freeze_day' not 'day_local'
+      const { error } = await supabase.from("habit_freezes").insert({
+        habit_id: id,
+        user_id: userId,
+        freeze_day: dateStr
+      });
+      if (error && error.code !== "23505") throw error; // ignore duplicate
       return { id, dateStr };
     },
     onMutate: async ({ id, dateStr }) => {
-      await qc.cancelQueries({ queryKey: KEY });
+      await qc.cancelQueries({ queryKey });
       const prev = qc.getQueryData<HabitWithStreak[]>(queryKey);
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
       qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
         if (!old) return old;
         return old.map(h => {
           if (h.id === id) {
             const newFreezes = new Set(h.freezes);
             newFreezes.add(dateStr);
-            return { ...h, freezes: newFreezes, frozenToday: dateStr === new Date().toLocaleDateString("en-CA") };
+            return { ...h, freezes: newFreezes, frozenToday: dateStr === today };
           }
           return h;
         });
@@ -591,21 +480,28 @@ export function useHabits(currentDate: Date = new Date()) {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
+    onSettled: () => qc.invalidateQueries({ queryKey }),
   });
 
   const resetStreak = async (habitId: string, reason: string) => {
     const { data: authData } = await supabase.auth.getSession();
     if (!authData.session) throw new Error("Not logged in");
+    const userId = authData.session.user.id;
+
+    // Reset current streak in DB
     await supabase
       .from("habit_streaks")
       .update({ current_streak: 0 })
       .eq("habit_id", habitId);
-    const key = `relapse_logs_${habitId}`;
-    const existing = JSON.parse(localStorage.getItem(key) || "[]");
-    existing.push({ reason, date: new Date().toISOString() });
-    localStorage.setItem(key, JSON.stringify(existing));
-    qc.invalidateQueries({ queryKey: KEY });
+    
+    // Log relapse reason
+    await supabase.from("habit_relapses").insert({
+      habit_id: habitId,
+      user_id: userId,
+      reason: reason
+    });
+
+    qc.invalidateQueries({ queryKey });
   };
 
   return {
@@ -621,10 +517,10 @@ export function useHabits(currentDate: Date = new Date()) {
     updateHabit: (id: string, updates: Partial<Habit>) => updateHabit.mutate({ id, updates }),
     updateHabitAsync: (id: string, updates: Partial<Habit>) => updateHabit.mutateAsync({ id, updates }),
     deleteHabit: (id: string) => deleteHabit.mutateAsync(id),
+    undeleteHabit: (id: string) => undeleteHabit.mutateAsync(id),
     freezeHabit: (id: string, dateStr: string, monthStr: string) => freezeHabit.mutateAsync({ id, dateStr, monthStr }),
     resetStreak,
     isAddingHabit: addHabit.isPending,
     isUpdatingHabit: updateHabit.isPending,
   };
 }
-

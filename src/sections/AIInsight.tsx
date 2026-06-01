@@ -20,9 +20,8 @@ export default function AIInsight() {
   return (
     <motion.section
       whileHover={{ y: -2 }}
-      className="rounded-3xl p-7 h-full relative overflow-hidden"
+      className="rounded-3xl p-7 h-full relative overflow-hidden bg-card"
       style={{
-        background: "linear-gradient(135deg, rgba(34,197,94,0.06), rgba(13,20,16,0.85))",
         border: "1px solid rgba(34,197,94,0.22)",
         boxShadow: "0 0 32px rgba(34,197,94,0.12)",
       }}
@@ -47,11 +46,11 @@ export default function AIInsight() {
         />
       ))}
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 relative z-10">
         <motion.div
           animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.06, 1] }}
           transition={{ duration: 4, repeat: Infinity }}
-          className="w-9 h-9 rounded-full flex items-center justify-center"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white"
           style={{
             background: "linear-gradient(135deg, #15803D, #4ADE80)",
             boxShadow: "0 0 20px rgba(34,197,94,0.5)",
@@ -60,12 +59,12 @@ export default function AIInsight() {
           <Sparkles size={14} />
         </motion.div>
         <div>
-          <div className="text-sm font-bold">رؤية زينيث</div>
-          <div className="text-[10px] text-[#647067]">منذ 5 دقائق</div>
+          <div className="text-sm font-bold text-foreground">رؤية زينيث</div>
+          <div className="text-[10px] text-muted-foreground">منذ 5 دقائق</div>
         </div>
       </div>
 
-      <p className="text-[15px] leading-[1.8] text-[#F4F7F5] mb-5 max-w-[480px] min-h-[110px] relative">
+      <p className="text-[15px] leading-[1.8] text-foreground mb-5 max-w-[480px] min-h-[110px] relative z-10">
         {typed}
         {typed.length < fullText.length && (
           <motion.span
@@ -76,12 +75,12 @@ export default function AIInsight() {
         )}
       </p>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 relative z-10">
         <motion.button
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setApplied(true)}
-          className="px-4 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition hover:scale-[1.02]"
+          className="px-4 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition hover:scale-[1.02] text-white"
           style={{
             background: applied
               ? "linear-gradient(135deg, #4ADE80, #22C55E)"
@@ -101,10 +100,10 @@ export default function AIInsight() {
             )}
           </AnimatePresence>
         </motion.button>
-        <button className="px-4 py-2 rounded-xl text-[12px] text-[#A7B3AB] hover:text-white hover:bg-white/5 transition">
+        <button className="px-4 py-2 rounded-xl text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted transition">
           اشرح أكثر
         </button>
-        <button className="w-8 h-8 rounded-xl text-[#647067] hover:text-white hover:bg-white/5 transition flex items-center justify-center">
+        <button className="w-8 h-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition flex items-center justify-center">
           <X size={14} />
         </button>
       </div>

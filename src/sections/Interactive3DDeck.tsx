@@ -42,9 +42,8 @@ function Tilt3DCard({ icon: Icon, title, value, hint, color, index }: typeof car
     >
       {/* Layered surfaces */}
       <div
-        className="absolute inset-0 rounded-2xl"
+        className="absolute inset-0 rounded-2xl bg-card"
         style={{
-          background: "linear-gradient(140deg, rgba(13,20,16,0.95), rgba(6,10,8,0.95))",
           border: `1px solid ${color}33`,
           boxShadow: `0 20px 60px -20px ${color}55, inset 0 1px 0 rgba(255,255,255,0.04)`,
         }}
@@ -84,9 +83,9 @@ function Tilt3DCard({ icon: Icon, title, value, hint, color, index }: typeof car
       </motion.div>
 
       <div style={{ transform: "translateZ(25px)" }} className="relative z-10">
-        <div className="text-[11px] text-[#647067] uppercase tracking-wider mb-1">{title}</div>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">{title}</div>
         <div className="text-2xl font-extrabold tabular" style={{ color }}>{value}</div>
-        <div className="text-[10px] text-[#A7B3AB] mt-2">{hint}</div>
+        <div className="text-[10px] text-muted-foreground mt-2">{hint}</div>
       </div>
 
       {/* Shine sweep on hover */}
@@ -124,10 +123,10 @@ export default function Interactive3DDeck() {
 
       <div className="relative flex items-baseline justify-between mb-6">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.25em] text-[#647067]">لوحة تفاعلية</div>
+          <div className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">لوحة تفاعلية</div>
           <h2 className="text-2xl font-extrabold text-grad-green mt-1">نبض اللحظة</h2>
         </div>
-        <div className="text-[11px] text-[#647067]">حرّك الفأرة فوق البطاقات</div>
+        <div className="text-[11px] text-muted-foreground">حرّك الفأرة فوق البطاقات</div>
       </div>
 
       <div className="relative grid grid-cols-2 md:grid-cols-3 gap-5">

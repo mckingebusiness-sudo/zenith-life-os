@@ -39,34 +39,24 @@ export default function AuthPage({ onSuccess }: AuthPageProps) {
         return;
       }
 
-      // Use Edge Function to create user with auto email confirmation (no rate limit)
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            email: form.email,
-            password: form.password,
-            full_name: form.fullName,
-          }),
+      // Direct signUp (no Edge Function needed)
+      const { error: signUpError } = await signUp(form.email, form.password, form.fullName);
+      if (signUpError) {
+        if (signUpError.message?.toLowerCase().includes("already registered") ||
+            signUpError.message?.toLowerCase().includes("already exists")) {
+          setError("هذا البريد مسجل بالفعل — جرب تسجيل الدخول");
+        } else {
+          setError(`خطأ من الخادم: ${signUpError.message}`);
         }
-      );
-
-      const result = await res.json();
-      if (result.error) {
-        setError(result.error.includes("already registered") ? "هذا البريد مسجل بالفعل" : result.error);
         setLoading(false);
         return;
       }
 
-      // Auto-login after successful creation
+      // Auto-login after successful registration
       const { error: loginError } = await signIn(form.email, form.password);
       if (loginError) {
-        setError("تم إنشاء الحساب، يرجى تسجيل الدخول");
+        // Email confirmation might be required
+        setError("تم إنشاء الحساب ✓ — تحقق من بريدك لتأكيد الحساب ثم سجل الدخول");
         setMode("login");
       } else {
         onSuccess();

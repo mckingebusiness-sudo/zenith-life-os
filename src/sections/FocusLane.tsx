@@ -18,10 +18,10 @@ export default function FocusLane() {
     <section className="glass rounded-3xl p-7 relative overflow-hidden">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-[#647067]">إيقاع يومك</div>
-          <div className="text-lg font-bold mt-1">ذروة طاقتك خلال 47 دقيقة</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">إيقاع يومك</div>
+          <div className="text-lg font-bold mt-1 text-foreground">ذروة طاقتك خلال 47 دقيقة</div>
         </div>
-        <div className="text-[13px] tabular text-[#A7B3AB]">الآن · 2:34 م</div>
+        <div className="text-[13px] tabular text-muted-foreground">الآن · 2:34 م</div>
       </div>
 
       <div className="relative h-24 flex items-end gap-1">
@@ -58,7 +58,7 @@ export default function FocusLane() {
           const colors = {
             done: { bg: "rgba(63,98,18,0.2)", border: "rgba(167,201,87,0.3)", text: "#A7C957", icon: "✓" },
             active: { bg: "rgba(34,197,94,0.15)", border: "rgba(34,197,94,0.5)", text: "#4ADE80", icon: "●" },
-            upcoming: { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.08)", text: "#647067", icon: "○" },
+            upcoming: { bg: "var(--muted)", border: "var(--border)", text: "var(--muted-foreground)", icon: "○" },
           }[e.state];
           return (
             <div key={e.time} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"

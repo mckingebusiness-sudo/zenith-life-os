@@ -6,6 +6,7 @@ import MoneyFlow from "../sections/MoneyFlow";
 import AIInsight from "../sections/AIInsight";
 import DayTimeline from "../sections/DayTimeline";
 import Interactive3DDeck from "../sections/Interactive3DDeck";
+import { useTranslation } from "react-i18next";
 
 export default function Dashboard() {
   return (
@@ -35,11 +36,12 @@ export default function Dashboard() {
 }
 
 export function Placeholder({ title }: { title: string }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center py-32 text-center">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-[#647067] mb-3">قريباً</div>
+      <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-3">{t('common.comingSoon')}</div>
       <h1 className="text-4xl font-extrabold text-grad-green mb-3">{title}</h1>
-      <p className="text-[#A7B3AB] max-w-md">هذه الصفحة قيد التصميم. صفحة غرفة التحكم الرئيسية جاهزة.</p>
+      <p className="text-muted-foreground max-w-md">{t('common.underConstruction')}</p>
     </div>
   );
 }

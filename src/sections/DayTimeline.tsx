@@ -21,12 +21,12 @@ export default function DayTimeline() {
         transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
       />
       <div className="flex items-baseline justify-between mb-6">
-        <h2 className="text-base font-bold">إيقاع اليوم</h2>
-        <div className="text-[11px] text-[#647067]">5 جلسات</div>
+        <h2 className="text-base font-bold text-foreground">إيقاع اليوم</h2>
+        <div className="text-[11px] text-muted-foreground">5 جلسات</div>
       </div>
 
       <div className="relative">
-        <div className="absolute right-0 left-0 top-3 h-px bg-white/5" />
+        <div className="absolute right-0 left-0 top-3 h-px bg-border" />
         <motion.div
           className="absolute right-0 top-[10px] h-1 rounded-full"
           style={{ background: "linear-gradient(90deg, #4ADE80, #15803D)", boxShadow: "0 0 12px #4ADE80" }}
@@ -57,8 +57,8 @@ export default function DayTimeline() {
                       ? "#3F6212"
                       : isSel
                       ? "radial-gradient(circle, #4ADE80, #15803D)"
-                      : "#15201A",
-                    border: isActive || isSel ? "none" : "1px solid rgba(255,255,255,0.1)",
+                      : "var(--bg)",
+                    border: isActive || isSel ? "none" : "1px solid var(--border)",
                     boxShadow: isActive || isSel ? "0 0 24px rgba(74,222,128,0.6)" : "none",
                   }}
                 >
@@ -66,11 +66,11 @@ export default function DayTimeline() {
                   {isDone && <span className="text-[10px] text-white">✓</span>}
                 </motion.div>
                 <div className="text-center" style={{ opacity: isDone && !isSel ? 0.5 : 1 }}>
-                  <div className="text-[11px] tabular text-[#A7B3AB]">{e.time}</div>
-                  <div className={`text-[12px] mt-1 ${isActive || isSel ? "font-bold text-[#4ADE80]" : "text-[#F4F7F5]"}`}>
+                  <div className="text-[11px] tabular text-muted-foreground">{e.time}</div>
+                  <div className={`text-[12px] mt-1 ${isActive || isSel ? "font-bold text-[#4ADE80]" : "text-foreground"}`}>
                     {e.title}
                   </div>
-                  <div className="text-[10px] text-[#647067] mt-0.5">{e.dur}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{e.dur}</div>
                 </div>
               </motion.div>
             );

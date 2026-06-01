@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect } from "react";
-import { HabitWithStreak, HabitColor, getMonthlyFreezeCount } from "@/hooks/useHabits";
+import { HabitWithStreak, HabitColor } from "@/hooks/useHabits";
 import { Edit2, Trash2, Check, Flame, Award, AlertTriangle, PauseCircle, ChevronRight, ChevronLeft, Info, Trophy, Sparkles, Shield, Snowflake, Clock, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+
 type Props = {
   habits: HabitWithStreak[];
   currentDate: Date;
@@ -32,7 +34,18 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
   const currentMonthStr = todayLocal.slice(0, 7);
-  const freezesUsed = getMonthlyFreezeCount(currentMonthStr);
+  
+  const freezesUsed = useMemo(() => {
+    let count = 0;
+    habits.forEach(h => {
+      if (h.freezes) {
+        h.freezes.forEach(d => {
+          if (d.startsWith(currentMonthStr)) count++;
+        });
+      }
+    });
+    return count;
+  }, [habits, currentMonthStr]);
 
   // Relapse popup state
   const [relapseHabitId, setRelapseHabitId] = useState<string | null>(null);
@@ -42,17 +55,45 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   const [journalHabitId, setJournalHabitId] = useState<string | null>(null);
   const [journalText, setJournalText] = useState("");
 
-  const handleCheckInWithJournal = (habitId: string, dayLocal: string) => {
+  const handleCheckInWithJournal = async (habitId: string, dayLocal: string) => {
     onCheckIn(habitId, dayLocal, "check");
     setJournalHabitId(habitId);
     setJournalText("");
-    setTimeout(() => setJournalHabitId(null), 5000);
+    
+    try {
+      const { data: authData } = await supabase.auth.getSession();
+      if (authData.session) {
+        const { data } = await supabase
+          .from("habit_journals")
+          .select("journal_text")
+          .eq("habit_id", habitId)
+          .eq("day_local", dayLocal)
+          .single();
+          
+        if (data) {
+          setJournalText(data.journal_text);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch existing journal", e);
+    }
   };
 
-  const saveJournal = () => {
-    if (journalText.trim()) {
-      const key = `journal_${journalHabitId}_${todayLocal}`;
-      localStorage.setItem(key, journalText.trim());
+  const saveJournal = async () => {
+    if (journalText.trim() && journalHabitId) {
+      try {
+        const { data: authData } = await supabase.auth.getSession();
+        if (authData.session) {
+          await supabase.from("habit_journals").upsert({
+            habit_id: journalHabitId,
+            user_id: authData.session.user.id,
+            day_local: todayLocal,
+            journal_text: journalText.trim()
+          }, { onConflict: 'habit_id,day_local' });
+        }
+      } catch (e) {
+        console.error("Failed to save journal", e);
+      }
     }
     setJournalHabitId(null);
   };
@@ -66,10 +107,15 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
     setRelapseReason("");
   };
 
-  // Pagination state (0 = most recent 14 days, 1 = previous 14 days, etc)
-  const [pageOffset, setPageOffset] = useState(0);
+  // Pagination state (0 = days 1-10, 1 = days 11-20, etc)
+  const [pageOffset, setPageOffset] = useState(() => {
+    if (isCurrentMonth) {
+      return Math.floor((today.getDate() - 1) / 10);
+    }
+    return 0;
+  });
 
-  // Show 14 days chunk based on pageOffset
+  // Show 10 days chunk based on pageOffset
   const { days, maxPageOffset } = useMemo(() => {
     const allDays = Array.from({ length: daysInMonth }, (_, i) => {
       const d = new Date(year, month, i + 1);
@@ -80,40 +126,33 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
       return { num: i + 1, dayName, fullDate, isToday, isFuture };
     });
     
-    // Valid days (up to today if current month, or all month if past)
-    const validDays = isCurrentMonth ? allDays.filter(d => !d.isFuture) : allDays;
-    
     const CHUNK = 10;
-    const totalValid = validDays.length;
-    const maxPage = Math.max(0, Math.ceil(totalValid / CHUNK) - 1);
-    
-    // Ensure pageOffset is valid
+    const maxPage = Math.max(0, Math.ceil(daysInMonth / CHUNK) - 1);
     const currentOffset = Math.min(pageOffset, maxPage);
     
-    // We want page 0 to show the MOST RECENT days (e.g. days 21-30)
-    // page 1 to show the NEXT most recent (e.g. days 11-20)
-    // page 2 to show the oldest (e.g. days 1-10)
-    const end = Math.max(0, totalValid - currentOffset * CHUNK);
-    const start = Math.max(0, end - CHUNK);
+    const start = currentOffset * CHUNK;
+    const end = Math.min(start + CHUNK, daysInMonth);
     
-    return { days: validDays.slice(start, end), maxPageOffset: maxPage };
-  }, [daysInMonth, year, month, todayLocal, isCurrentMonth, pageOffset]);
+    return { days: allDays.slice(start, end), maxPageOffset: maxPage };
+  }, [daysInMonth, year, month, todayLocal, pageOffset]);
 
   // Adjust pageOffset if month changes
   useEffect(() => {
-    setPageOffset(0);
-  }, [month, year]);
+    if (isCurrentMonth) {
+      setPageOffset(Math.floor((today.getDate() - 1) / 10));
+    } else {
+      setPageOffset(0);
+    }
+  }, [month, year, isCurrentMonth]);
 
   // Stats
-  const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit');
-  const badHabits = habits.filter(h => (h as any).habit_type === 'quit');
+  const goodHabits = habits.filter(h => h.habit_type !== 'quit');
+  const badHabits = habits.filter(h => h.habit_type === 'quit');
 
   const completedGood = goodHabits.filter(h => h.checkedToday).length;
   const totalGood = goodHabits.length;
   
-  // For bad habits, checkedToday means they actively confirmed avoiding it
   const avoidedBad = badHabits.filter(h => h.checkedToday).length;
-  const relapsedBad = badHabits.length - avoidedBad;
   const totalBad = badHabits.length;
 
   // Total overall score
@@ -261,8 +300,8 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
 
       {/* ─── Grid Table ─── */}
       <div className="glass rounded-3xl border border-white/[0.06] overflow-hidden">
-        <div className="overflow-hidden">
-          <div className="min-w-0 w-full">
+        <div className="overflow-x-auto">
+          <div className="min-w-[700px] w-full pb-4">
             {/* Header Row */}
             <div className="flex items-center px-5 py-4 border-b border-white/[0.06] bg-gradient-to-r from-black/30 to-transparent">
               <div className="w-36 shrink-0 flex items-center justify-between text-xs font-bold text-[#8B9A90] tracking-wider uppercase pl-3 border-l border-white/5">
@@ -327,7 +366,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                 <div
                   key={habit.id}
                   className={`flex items-center px-5 py-5 border rounded-2xl transition-colors group shadow-sm ${
-                    (habit as any).habit_type === 'quit'
+                    habit.habit_type === 'quit'
                       ? 'bg-red-950/10 border-red-500/10 hover:bg-red-950/20'
                       : 'bg-white/[0.01] border-white/5 hover:bg-white/[0.03]'
                   }`}
@@ -346,7 +385,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                     <div className="flex flex-col min-w-0">
                       <span className="font-semibold text-xs text-white/90 truncate flex items-center gap-1" title={habit.title}>
                         {habit.title}
-                        {(habit as any).habit_type === 'quit' && <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">🚫 سيئة</span>}
+                        {habit.habit_type === 'quit' && <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">🚫 سيئة</span>}
                       </span>
                       {habit.checkedToday && (
                         <span className="text-[9px] text-green-400/70">✓ تم</span>
@@ -358,7 +397,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   <div className="flex-1 flex justify-between px-2 items-center">
                     {days.map((day) => {
                       const isChecked = habit.checkins?.has(day.fullDate) || false;
-                      const isBad = (habit as any).habit_type === 'quit';
+                      const isBad = habit.habit_type === 'quit';
                       const isFrozen = habit.freezes?.has(day.fullDate);
                       let habitColor = isBad
                         ? (isChecked ? "#4ADE80" : "#EF4444")  // green=avoided, red=relapsed
@@ -418,7 +457,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
 
                   {/* Streak + Saved Value for quit habits — Phase 7.3: best streak badge */}
                   <div className="w-24 shrink-0 flex flex-col items-center justify-center gap-0.5 border-r border-white/5">
-                    {(habit as any).habit_type === 'quit' ? (
+                    {habit.habit_type === 'quit' ? (
                       <>
                         <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-red-500/15 to-orange-500/10 text-red-400">
                           <AlertTriangle size={11} />
@@ -431,9 +470,9 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                             {habit.streak?.longest_streak}
                           </div>
                         )}
-                        {(habit as any).saved_value_per_day ? (
+                        {habit.saved_value_per_day ? (
                           <div className="text-[9px] text-green-400/70 text-center leading-tight">
-                            وفّر {(habit.streak?.current_streak || 0) * ((habit as any).saved_value_per_day || 0)} {(habit as any).saved_unit || ''}
+                            وفّر {(habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)} {habit.saved_unit || ''}
                           </div>
                         ) : null}
                       </>
@@ -454,14 +493,14 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                             أفضل: {habit.streak?.longest_streak}
                           </div>
                         )}
-                        {(habit as any).saved_value_per_day ? (
+                        {habit.saved_value_per_day ? (
                           <div className="text-[9px] text-green-400/70 text-center leading-tight">
-                            حقق {(habit.streak?.current_streak || 0) * ((habit as any).saved_value_per_day || 0)} {(habit as any).saved_unit || ''}
+                            حقق {(habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)} {habit.saved_unit || ''}
                           </div>
                         ) : null}
                       </>
                     )}
-                    {(habit as any).is_paused && (
+                    {habit.is_paused && (
                       <div className="flex items-center gap-0.5 text-[9px] text-blue-400">
                         <PauseCircle size={9} /> مجمّد
                       </div>
@@ -470,7 +509,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
 
                   {/* Actions — always visible (Phase 4) */}
                   <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1">
-                    {(habit as any).habit_type === 'quit' && isCurrentMonth && onResetStreak ? (
+                    {habit.habit_type === 'quit' && isCurrentMonth && onResetStreak ? (
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
@@ -482,7 +521,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                       </motion.button>
                     ) : null}
 
-                    {(habit as any).habit_type !== 'quit' ? (
+                    {habit.habit_type !== 'quit' ? (
                       <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}

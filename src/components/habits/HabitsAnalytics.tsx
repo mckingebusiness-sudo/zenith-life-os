@@ -5,6 +5,7 @@ import { Flame, Target, Trophy, TrendingUp, Calendar, Sparkles, BarChart3, Brain
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { PrintableReport } from "./PrintableReport";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -29,8 +30,8 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     const month = currentDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit');
-    const badHabits = habits.filter(h => (h as any).habit_type === 'quit');
+    const goodHabits = habits.filter(h => h.habit_type !== 'quit');
+    const badHabits = habits.filter(h => h.habit_type === 'quit');
 
     const result = [];
     for (let i = 1; i <= daysInMonth; i++) {
@@ -70,14 +71,21 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
 
   // Per-habit stats for bar chart
   const habitStats = useMemo(() => {
-    return habits.map(h => ({
-      name: h.title.length > 12 ? h.title.slice(0, 12) + "…" : h.title,
-      icon: h.icon || "✨",
-      checkins: h.checkins?.size || 0,
-      streak: h.streak?.current_streak || 0,
-      color: h.color,
-    }));
-  }, [habits]);
+    const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+    return habits.map(h => {
+      let monthCheckins = 0;
+      h.checkins?.forEach(dateStr => {
+        if (dateStr.startsWith(prefix)) monthCheckins++;
+      });
+      return {
+        name: h.title.length > 12 ? h.title.slice(0, 12) + "…" : h.title,
+        icon: h.icon || "✨",
+        checkins: monthCheckins,
+        streak: h.streak?.current_streak || 0,
+        color: h.color,
+      };
+    });
+  }, [habits, currentDate]);
 
   const bestStreak = useMemo(() => {
     return Math.max(...habits.map(h => h.streak?.longest_streak || 0), 0);
@@ -198,8 +206,8 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         
         let limitedScore = 0;
         let totalScore = 0;
-        const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit');
-        const badHabits = habits.filter(h => (h as any).habit_type === 'quit');
+        const goodHabits = habits.filter(h => h.habit_type !== 'quit');
+        const badHabits = habits.filter(h => h.habit_type === 'quit');
 
         for (let i = 1; i <= maxDays; i++) {
             const mm = String(m + 1).padStart(2, "0");
@@ -266,8 +274,8 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     })));
 
     const totalHabits = habits.length;
-    const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit').length;
-    const quitHabits = habits.filter(h => (h as any).habit_type === 'quit').length;
+    const goodHabits = habits.filter(h => h.habit_type !== 'quit').length;
+    const quitHabits = habits.filter(h => h.habit_type === 'quit').length;
 
     const prompt = `أنت زينيث AI، مساعد التطوير الشخصي. قم بتحليل أداء المستخدم في عاداته للشهر: ${selectedMonthName}${isCurrentMonth ? ' (الشهر الجاري)' : ''}.
 
@@ -286,11 +294,18 @@ ${ctx}
 تحدث بأسلوب مدرب شخصي داعم، ولا تستخدم JSON أبداً.`;
 
     try {
+      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
+      if (!apiKey) {
+        toast.error("مفتاح الذكاء الاصطناعي غير متوفر.");
+        setAiLoading(false);
+        return;
+      }
+
       const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: "mistral-large-latest",
@@ -299,8 +314,13 @@ ${ctx}
           max_tokens: 600,
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP Error: ${res.status}`);
+      }
+      
       const data = await res.json();
+      
       setAiInsight(data.choices?.[0]?.message?.content ?? null);
       toast.success("تم الانتهاء من التحليل!", { style: { background: '#333', color: '#fff' } });
     } catch (err: any) {
@@ -317,175 +337,12 @@ ${ctx}
     setIsExporting(true);
 
     try {
-      const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-      const monthName = currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
-      const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit');
-      const quitHabits = habits.filter(h => (h as any).habit_type === 'quit');
-      const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-      const today = Math.min(new Date().getDate(), daysInMonth);
-
-      // ── Page setup ──
-      const W = pdf.internal.pageSize.getWidth();
-      let y = 20;
-      const LM = 15; // left margin
-      const RM = W - 15; // right margin
-
-      const addLine = (text: string, size = 11, bold = false, color: [number,number,number] = [220,220,220]) => {
-        pdf.setFontSize(size);
-        pdf.setFont('helvetica', bold ? 'bold' : 'normal');
-        pdf.setTextColor(...color);
-        pdf.text(text, LM, y);
-        y += size * 0.5 + 3;
-      };
-
-      const addDivider = (color: [number,number,number] = [60,80,65]) => {
-        pdf.setDrawColor(...color);
-        pdf.setLineWidth(0.3);
-        pdf.line(LM, y, RM, y);
-        y += 5;
-      };
-
-      const checkPage = () => {
-        if (y > 270) { pdf.addPage(); y = 20; }
-      };
-
-      // ── Dark background ──
-      pdf.setFillColor(17, 23, 19);
-      pdf.rect(0, 0, W, pdf.internal.pageSize.getHeight(), 'F');
-
-      // ── Header ──
-      pdf.setFillColor(30, 50, 35);
-      pdf.roundedRect(LM, 8, W - 30, 24, 4, 4, 'F');
-      pdf.setFontSize(18);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(74, 222, 128);
-      pdf.text('Zenith Life OS', LM + 5, 18);
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(167, 179, 171);
-      pdf.text(`Habits Report - ${monthName}`, LM + 5, 26);
-      y = 42;
-
-      // ── Summary stats ──
-      addLine('Monthly Summary', 13, true, [74, 222, 128]);
-      addDivider([74, 222, 128]);
-
-      const totalGoodCheckins = goodHabits.reduce((s, h) => {
-        let c = 0;
-        for (let i = 1; i <= today; i++) {
-          const mm = String(currentDate.getMonth() + 1).padStart(2,'0');
-          const dd = String(i).padStart(2,'0');
-          if (h.checkins?.has(`${currentDate.getFullYear()}-${mm}-${dd}`)) c++;
-        }
-        return s + c;
-      }, 0);
-
-      const totalQuitAvoided = quitHabits.reduce((s, h) => {
-        let c = 0;
-        for (let i = 1; i <= today; i++) {
-          const mm = String(currentDate.getMonth() + 1).padStart(2,'0');
-          const dd = String(i).padStart(2,'0');
-          if (h.checkins?.has(`${currentDate.getFullYear()}-${mm}-${dd}`)) c++;
-        }
-        return s + c;
-      }, 0);
-
-      const bestStreak = Math.max(...habits.map(h => h.streak?.current_streak || 0), 0);
-
-      const stats = [
-        [`Total habits: ${habits.length}`, `Good habits: ${goodHabits.length}`],
-        [`Quit habits: ${quitHabits.length}`, `Days elapsed: ${today}/${daysInMonth}`],
-        [`Good completions this month: ${totalGoodCheckins}`, `Quit avoided: ${totalQuitAvoided}`],
-        [`Best active streak: ${bestStreak} days`, `Average/day: ${habits.length > 0 ? (totalGoodCheckins / today).toFixed(1) : 0}`],
-      ];
-
-      stats.forEach(([left, right]) => {
-        checkPage();
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(200, 200, 200);
-        pdf.text(left, LM, y);
-        pdf.text(right, W / 2 + 5, y);
-        y += 7;
-      });
-
-      y += 5;
-
-      // ── Monthly comparison ──
-      checkPage();
-      addLine('Monthly Comparison', 13, true, [96, 165, 250]);
-      addDivider([60, 80, 120]);
-
-      monthsStats.slice(0, 6).forEach((m, i) => {
-        checkPage();
-        const label = `${m.name}${m.isRealCurrent ? ' (current)' : ''}`;
-        const score = `${m.limitedScore} completions (day 1-${m.limitDay})`;
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', i === 0 ? 'bold' : 'normal');
-        pdf.setTextColor(i === 0 ? 74 : 167, i === 0 ? 222 : 179, i === 0 ? 128 : 171);
-        pdf.text(label, LM, y);
-        pdf.setTextColor(200, 200, 200);
-        pdf.text(score, W / 2 + 5, y);
-
-        // Mini bar
-        const barW = (m.limitedScore / Math.max(...monthsStats.map(x => x.limitedScore), 1)) * 60;
-        pdf.setFillColor(i === 0 ? 74 : 59, i === 0 ? 222 : 130, i === 0 ? 128 : 246);
-        pdf.rect(LM, y + 2, barW, 2, 'F');
-        y += 10;
-      });
-
-      y += 5;
-
-      // ── Habits list ──
-      if (goodHabits.length > 0) {
-        checkPage();
-        addLine('Good Habits', 13, true, [74, 222, 128]);
-        addDivider([40, 80, 50]);
-        goodHabits.forEach(h => {
-          checkPage();
-          const streak = h.streak?.current_streak || 0;
-          const total = h.streak?.total_checkins || 0;
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(220, 220, 220);
-          // Just remove emoji or handle it simply since jsPDF standard fonts don't support emoji well
-          pdf.text(`- ${h.title}`, LM, y);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(150, 150, 150);
-          pdf.text(`streak: ${streak}d  |  total: ${total}`, W / 2 + 5, y);
-          y += 8;
-        });
-        y += 4;
-      }
-
-      if (quitHabits.length > 0) {
-        checkPage();
-        addLine('Quit Habits (tracking avoidance)', 13, true, [248, 113, 113]);
-        addDivider([100, 40, 40]);
-        quitHabits.forEach(h => {
-          checkPage();
-          const streak = h.streak?.current_streak || 0;
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(220, 220, 220);
-          pdf.text(`- ${h.title}`, LM, y);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(150, 150, 150);
-          pdf.text(`avoided streak: ${streak}d`, W / 2 + 5, y);
-          y += 8;
-        });
-      }
-
-      const filename = `Zenith-Habits-${currentDate.getFullYear()}-${currentDate.getMonth() + 1}.pdf`;
-      pdf.save(filename);
-      setIsExporting(false);
-      toast.success('تم تصدير التقرير بنجاح ✅');
+      window.print();
     } catch (err) {
       console.error('PDF error:', err);
+      toast.error('حدث خطأ في الطباعة');
+    } finally {
       setIsExporting(false);
-      toast.error('حدث خطأ في التصدير');
     }
   };
 
@@ -509,13 +366,15 @@ ${ctx}
     : 'أنت في البداية! استمر بقوة 🚀';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.1 }}
-      className="space-y-6"
-      id="analytics-report"
-    >
+    <>
+      <PrintableReport habits={habits} currentDate={currentDate} monthsStats={monthsStats} />
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="space-y-6 print:hidden"
+        id="analytics-report"
+      >
       <div className="glass rounded-3xl p-6 border border-white/[0.06] relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -745,7 +604,8 @@ ${ctx}
             ))}
           </div>
         </motion.div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }
 

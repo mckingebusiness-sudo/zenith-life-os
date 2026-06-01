@@ -15,6 +15,8 @@ import { AuthProvider } from "@/lib/AuthProvider";
 import { useAuth } from "@/lib/useAuth";
 import AuthPage from "@/components/AuthPage";
 import { DirectionProvider } from "@/stores/useDirection";
+import { ThemeProvider } from "@/stores/useTheme";
+import "@/lib/i18n";
 
 function NotFoundComponent() {
   return (
@@ -161,11 +163,13 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <DirectionProvider>
-        <AuthProvider>
-          <AuthGate />
-        </AuthProvider>
-      </DirectionProvider>
+      <ThemeProvider>
+        <DirectionProvider>
+          <AuthProvider>
+            <AuthGate />
+          </AuthProvider>
+        </DirectionProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

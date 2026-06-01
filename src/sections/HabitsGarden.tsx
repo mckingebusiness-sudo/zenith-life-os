@@ -47,22 +47,22 @@ export default function HabitsGarden() {
 
       <div className="flex items-baseline justify-between mb-5 relative z-10">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-bold">حديقة العادات</h2>
+          <h2 className="text-base font-bold text-foreground">حديقة العادات</h2>
           <motion.span
             animate={{ rotate: [0, 12, -8, 0] }}
             transition={{ duration: 4, repeat: Infinity }}
-            className="text-[#4ADE80]"
+            className="text-primary"
           >
             <Sparkles size={13} />
           </motion.span>
         </div>
-        <div className="text-[11px] text-[#647067]">
-          <span className="text-[#4ADE80] tabular font-bold">{doneCount}</span>/{total} اليوم
+        <div className="text-[11px] text-muted-foreground">
+          <span className="text-primary tabular font-bold">{doneCount}</span>/{total} اليوم
         </div>
       </div>
 
       {/* Progress bar */}
-      <div className="relative h-1 rounded-full bg-white/[0.05] mb-5 overflow-hidden">
+      <div className="relative h-1 rounded-full bg-border mb-5 overflow-hidden">
         <motion.div
           className="absolute inset-y-0 right-0 rounded-full"
           style={{ background: "linear-gradient(90deg, #15803D, #4ADE80)", boxShadow: "0 0 12px rgba(74,222,128,0.6)" }}
@@ -72,7 +72,7 @@ export default function HabitsGarden() {
       </div>
 
       {activeHabits.length === 0 ? (
-        <div className="text-center py-6 relative z-10 text-white/50 text-sm">
+        <div className="text-center py-6 relative z-10 text-muted-foreground text-sm">
           لا توجد عادات بعد
         </div>
       ) : (
@@ -92,12 +92,12 @@ export default function HabitsGarden() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.08 * i, type: "spring", damping: 18 }}
                 whileHover={{ y: -4 }}
-                className="relative flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-white/[0.03] transition cursor-pointer border border-transparent hover:border-green-500/20"
-                onClick={() => toggle(habit.id, habit.checkedToday)}
+                className="relative flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-muted transition cursor-pointer border border-transparent hover:border-green-500/20"
+                onClick={() => toggle(habit.id, !!habit.checkedToday)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    toggle(habit.id, habit.checkedToday);
+                    toggle(habit.id, !!habit.checkedToday);
                   }
                 }}
                 tabIndex={0}
@@ -133,25 +133,25 @@ export default function HabitsGarden() {
                     )}
                   </AnimatePresence>
                 </div>
-                <div className="text-[10px] text-[#A7B3AB] text-center truncate w-full" title={habit.title}>
+                <div className="text-[10px] text-muted-foreground text-center truncate w-full" title={habit.title}>
                   {habit.title}
                 </div>
                 <motion.div
                   key={habit.streak?.current_streak || 0}
-                  initial={{ scale: 1.4, color: "#4ADE80" }}
+                  initial={{ scale: 1.4, color: "var(--primary)" }}
                   animate={{ scale: 1 }}
-                  className="text-[11px] tabular font-bold text-[#4ADE80]"
+                  className="text-[11px] tabular font-bold text-primary"
                 >
                   {habit.streak?.current_streak || 0}
                 </motion.div>
                 <motion.button
                   whileTap={{ scale: 0.85 }}
-                  onClick={(e) => { e.stopPropagation(); toggle(habit.id, habit.checkedToday); }}
+                  onClick={(e) => { e.stopPropagation(); toggle(habit.id, !!habit.checkedToday); }}
                   tabIndex={-1}
                   className={`relative w-6 h-6 rounded-full border flex items-center justify-center transition ${
                     habit.checkedToday
-                      ? "bg-gradient-to-br from-[#15803D] to-[#4ADE80] border-green-400 shadow-[0_0_14px_rgba(74,222,128,0.6)]"
-                      : "border-green-500/30 hover:bg-green-500/10 hover:border-green-500/60"
+                      ? "bg-primary border-primary shadow-[0_0_14px_rgba(34,197,94,0.6)] text-primary-foreground"
+                      : "border-primary/30 hover:bg-primary/10 hover:border-primary/60 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <AnimatePresence>
