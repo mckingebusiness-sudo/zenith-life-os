@@ -51,8 +51,10 @@ export interface HabitWithStreak extends Habit {
   streak: HabitStreak | null;
   checkins?: Set<string>;
   freezes?: Set<string>;
+  relapses?: Set<string>;
   checkedToday?: boolean;
   frozenToday?: boolean;
+  relapsedToday?: boolean;
 }
 
 const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -106,17 +108,36 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
     freezesByHabit.get(f.habit_id)!.add(dayStr);
   });
 
+  // Fetch relapses for quit habits
+  const { data: recentRelapses } = await supabase
+    .from("habit_relapses")
+    .select("habit_id, created_at")
+    .gte("created_at", startStr)
+    .lte("created_at", endStr + "T23:59:59Z");
+
+  const relapsesByHabit = new Map<string, Set<string>>();
+  recentRelapses?.forEach((r) => {
+    if (!relapsesByHabit.has(r.habit_id)) relapsesByHabit.set(r.habit_id, new Set());
+    // Convert timestamp to local date string (YYYY-MM-DD)
+    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date(r.created_at));
+    relapsesByHabit.get(r.habit_id)!.add(localDate);
+  });
+
   return (habits || []).map((h: any) => {
     const habitCheckins = checkinsByHabit.get(h.id) || new Set<string>();
     const habitFreezes = freezesByHabit.get(h.id) || new Set<string>();
+    const habitRelapses = relapsesByHabit.get(h.id) || new Set<string>();
+    
     return {
       ...h,
       habit_type: h.habit_type || 'good',
       streak: h.streak?.[0] || { current_streak: 0, longest_streak: 0, total_checkins: 0 },
       checkins: habitCheckins,
       freezes: habitFreezes,
+      relapses: habitRelapses,
       checkedToday: habitCheckins.has(today),
       frozenToday: habitFreezes.has(today),
+      relapsedToday: habitRelapses.has(today),
     };
   });
 }
@@ -310,6 +331,8 @@ export function useHabits(currentDate: Date = new Date()) {
         checkedToday: false,
         freezes: new Set(),
         frozenToday: false,
+        relapses: new Set(),
+        relapsedToday: false,
         streak: {
           habit_id: optimisticId,
           user_id: "optimistic",
