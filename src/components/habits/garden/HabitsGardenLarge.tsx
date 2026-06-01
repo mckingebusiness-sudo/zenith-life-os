@@ -2,30 +2,9 @@ import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { HabitWithStreak } from "@/hooks/useHabits";
 import { getPlantState } from "./plantConfig";
-import { calculateTodayProgress, isHabitHandledToday } from "@/lib/habitCalculations";
 import HabitPlant from "./HabitPlant";
-import { Check, Sparkles, Moon, Sun, Info, ChevronDown, ChevronUp, Flame, Leaf, Trophy, BookOpen, Snowflake, Shield } from "lucide-react";
+import { Check, Sparkles, Moon, Sun, Info, ChevronDown, ChevronUp, Flame, Leaf, Trophy, BookOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-const COLORS: Record<string, string> = {
-  red: "#EF4444",
-  orange: "#F97316",
-  amber: "#F59E0B",
-  yellow: "#EAB308",
-  lime: "#84CC16",
-  green: "#22C55E",
-  emerald: "#10B981",
-  teal: "#14B8A6",
-  cyan: "#06B6D4",
-  sky: "#0EA5E9",
-  blue: "#3B82F6",
-  indigo: "#6366F1",
-  violet: "#8B5CF6",
-  purple: "#A855F7",
-  fuchsia: "#D946EF",
-  pink: "#EC4899",
-  rose: "#F43F5E",
-};
 
 interface HabitsGardenLargeProps {
   habits: HabitWithStreak[];
@@ -57,32 +36,33 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
     return { isDay, timeIcon: isDay ? <Sun size={14} className="text-yellow-400" /> : <Moon size={14} className="text-blue-300" /> };
   }, []);
 
-  const { totalHabits: total, handledCount: doneCount, percentage: pct } = useMemo(() => calculateTodayProgress(activeHabits), [activeHabits]);
+  const total = activeHabits.length;
+  const doneCount = activeHabits.filter((h) => h.checkedToday).length;
+  const pct = total > 0 ? (doneCount / total) * 100 : 0;
   const avgStreak = total > 0 ? Math.round(activeHabits.reduce((a, h) => a + (h.streak?.current_streak || 0), 0) / total) : 0;
   const bestStreak = Math.max(...activeHabits.map(h => h.streak?.current_streak || 0), 0);
   const totalCheckins = activeHabits.reduce((a, h) => a + (h.streak?.total_checkins || 0), 0);
 
-  const handlePlantClick = (id: string, isHandled: boolean, isQuit: boolean) => {
-    if (!isHandled) {
-      onCheckIn(id, undefined, isQuit ? "uncheck" : "check");
+  const handlePlantClick = (id: string, checkedToday: boolean) => {
+    if (!checkedToday) {
+      onCheckIn(id, undefined, "check");
       setBurst(id);
       setTimeout(() => setBurst(null), 700);
     }
     setSelectedHabit((prev) => (prev === id ? null : id));
   };
 
-  const handleActionClick = (e: React.MouseEvent, habit: HabitWithStreak, isHandled: boolean) => {
+  const handleActionClick = (e: React.MouseEvent, id: string, checkedToday: boolean) => {
     e.stopPropagation();
-    if (habit.frozenToday) return; // Cannot toggle frozen from here
-    const isQuit = habit.habit_type === 'quit';
-    onCheckIn(habit.id, undefined, isHandled ? (isQuit ? "check" : "uncheck") : (isQuit ? "uncheck" : "check"));
-    if (!isHandled) {
-      setBurst(habit.id);
+    onCheckIn(id, undefined, checkedToday ? "uncheck" : "check");
+    if (!checkedToday) {
+      setBurst(id);
       setTimeout(() => setBurst(null), 700);
     }
   };
 
-  const bgClass = "bg-[#0a0a0a]";
+  const isSunny = pct >= 70;
+  const bgClass = "bg-card";
 
   const isAllDone = total > 0 && doneCount === total;
   const [showCelebration, setShowCelebration] = useState(false);
@@ -99,35 +79,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
 
   return (
     <section className={`rounded-3xl relative shadow-2xl flex flex-col transition-all duration-1000 ${bgClass} border border-border`}>
-      {/* ─── Ambient Particles & 3D Farm Backdrop ─── */}
-      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none z-0" style={{ perspective: "1000px" }}>
-        
-        {/* Sky / Atmosphere */}
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-background/50" />
-
-        {/* Ambient floating particles */}
-        {Array.from({ length: 15 }).map((_, i) => (
-          <motion.span
-            key={i}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 blur-[1px]"
-            style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%` }}
-            animate={{ y: [0, -40, 0], opacity: [0, 1, 0], scale: [0.5, 1.5, 0.5] }}
-            transition={{ duration: 3 + Math.random() * 4, repeat: Infinity, delay: Math.random() * 3, ease: "easeInOut" }}
-          />
-        ))}
-
-        {/* 3D Ground/Soil */}
-        <div 
-          className="absolute bottom-0 left-[-20%] right-[-20%] h-[120%] bg-gradient-to-t from-primary/5 via-primary/5 to-transparent origin-bottom"
-          style={{ transform: "rotateX(75deg) translateY(20%) scale(1.2)" }}
-        >
-          {/* Isometric grid pattern */}
-          <div className="w-full h-full opacity-10" style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: "40px 40px" }} />
-        </div>
-        
-        {/* Soft ground/soil gradient at the bottom to blend UI elements */}
-        <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-card via-card/80 to-transparent pointer-events-none" />
-      </div>
+      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none z-0">
 
       {/* All-done celebration */}
       <AnimatePresence>
@@ -136,21 +88,34 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-gradient-to-r from-emerald-500 to-green-400 text-foreground px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(52,211,153,0.4)] pointer-events-none"
+            className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-gradient-to-r from-emerald-500 to-green-400 text-white px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(52,211,153,0.4)] pointer-events-none"
           >
             <span className="text-xl">🎉</span>
             <div className="flex flex-col">
               <span className="text-sm font-bold leading-tight">{t('habits.allDone')}</span>
-              <span className="text-[10px] text-foreground/90 leading-tight">{t('habits.allDoneSub')}</span>
+              <span className="text-[10px] text-white/90 leading-tight">{t('habits.allDoneSub')}</span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Ambient particles */}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <motion.span
+          key={i}
+          aria-hidden
+          className={`absolute w-1 h-1 rounded-full pointer-events-none ${isSunny ? "bg-yellow-300/30" : "bg-green-400/20"}`}
+          style={{ left: `${(i * 8) % 100}%`, top: `${(i * 13) % 80}%`, boxShadow: isSunny ? "none" : "0 0 6px #4ADE80" }}
+          animate={{ y: [0, -18, 0], opacity: [0.1, 0.7, 0.1] }}
+          transition={{ duration: 4 + i * 0.6, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
+        />
+      ))}
+      </div>
+
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 sm:p-8 pb-4 relative z-10 gap-4 border-b border-border/50">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 sm:p-8 pb-4 relative z-10 gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-foreground/5 backdrop-blur-md border border-border shadow-inner">
+          <div className="p-2.5 rounded-2xl bg-foreground/5 backdrop-blur-md border border-border">
             {timeIcon}
           </div>
           <div>
@@ -203,15 +168,14 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
         </div>
       </div>
 
-      {/* ─── Farm Plants Grid ─── */}
+      {/* ─── Plants Grid ─── */}
       {activeHabits.length === 0 ? (
-        <div className="text-center py-20 relative z-10 text-muted-foreground flex flex-col items-center gap-3">
-          <Leaf size={48} className="text-primary/20 mb-2" />
-          <p className="text-lg font-medium">{t('habits.emptyGarden')}</p>
-          <p className="text-sm opacity-60">ازرع بذور عاداتك الأولى لتبدأ رحلتك</p>
+        <div className="text-center py-16 relative z-10 text-muted-foreground flex flex-col items-center gap-3">
+          <Leaf size={40} className="text-primary/30" />
+          <p>{t('habits.emptyGarden')}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-y-12 gap-x-4 relative z-10 px-6 sm:px-8 pt-8 pb-14 mt-2">
+        <div className="flex overflow-x-auto overflow-y-hidden gap-5 sm:gap-7 relative z-10 px-6 sm:px-8 pb-6 mt-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
           {activeHabits.map((habit, i) => {
             const state = getPlantState(
               habit.streak?.current_streak || 0,
@@ -219,17 +183,15 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
               habit.streak?.total_checkins || 0,
               habit.cadence
             );
-            const isHandled = isHabitHandledToday(habit);
-            const isQuit = habit.habit_type === 'quit';
             const isSelected = selectedHabit === habit.id;
 
             return (
               <motion.div
                 key={habit.id}
-                initial={{ opacity: 0, scale: 0.8, y: 30 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 0.05 * i, type: "spring", stiffness: 140, damping: 18 }}
-                className={`relative flex flex-col items-center gap-3 p-4 rounded-3xl transition-all duration-300 hover:bg-foreground/[0.03] cursor-pointer group ${isSelected ? 'z-50' : 'z-10'}`}
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.04 * i, type: "spring", stiffness: 160, damping: 20 }}
+                className={`min-w-[100px] flex-shrink-0 relative flex flex-col items-center gap-2.5 p-3 rounded-2xl transition hover:bg-foreground/5 cursor-pointer group ${isSelected ? 'z-50' : 'z-10'}`}
               >
                 {/* Tooltip (Elegant Cloud) */}
                 <AnimatePresence>
@@ -238,47 +200,49 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                       initial={{ opacity: 0, y: -12, scale: 0.88 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -6, scale: 0.9 }}
-                      className="absolute bottom-[90%] left-1/2 -translate-x-1/2 w-48 bg-card rounded-2xl p-4 shadow-2xl z-50 pointer-events-none text-foreground border border-border"
+                      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-44 bg-card rounded-2xl p-3 shadow-xl z-50 pointer-events-none text-foreground border border-border"
                     >
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-4 h-4 bg-card border-b border-r border-border rotate-45 -mt-2 rounded-[2px]" />
+                      {/* Tiny arrow pointing up */}
+                      <div className="absolute bottom-[98%] left-1/2 -translate-x-1/2 w-3 h-3 bg-card border-t border-l border-border rotate-45 rounded-[2px]" />
                       
-                      <div className="text-sm text-center font-black mb-3 border-b border-border pb-2 truncate">{habit.title}</div>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-[11px] mb-3 border-b border-border pb-3">
+                      <div className="text-xs text-center font-black mb-2 border-b border-border pb-2 truncate">{habit.title}</div>
+                      <div className="grid grid-cols-2 gap-x-1 gap-y-2 text-[10px] mb-2 border-b border-border pb-2">
                         <div className="text-muted-foreground">{t('habits.streak')} <span className="text-orange-500 font-bold">{habit.streak?.current_streak || 0}{t('habits.days')}</span></div>
                         <div className="text-muted-foreground">{t('habits.longest')} <span className="text-amber-500 font-bold">{habit.streak?.longest_streak || 0}{t('habits.days')}</span></div>
                         <div className="text-muted-foreground">{t('habits.total')} <span className="text-primary font-bold">{habit.streak?.total_checkins || 0}</span></div>
                         <div className="text-muted-foreground">{t('habits.level')} <span className="text-blue-500 font-bold">{state.currentLevel}/6</span></div>
                       </div>
                       {state.isDormant ? (
-                        <div className="text-xs text-orange-500 font-bold text-center flex items-center justify-center gap-1.5">
-                          <Moon size={12} className="fill-orange-500" /> {t('habits.dormantPlant')}
+                        <div className="text-[10px] text-orange-500 font-bold text-center flex items-center justify-center gap-1">
+                          <Moon size={10} className="fill-orange-500" /> {t('habits.dormantPlant')}
                         </div>
                       ) : state.currentLevel < 6 ? (
-                        <div className="text-xs text-center text-primary font-bold">
+                        <div className="text-[10px] text-center text-primary font-bold">
                           ⏳ {t('habits.daysToGrow', { days: state.daysToNext })}
                         </div>
                       ) : (
-                        <div className="text-xs text-center text-amber-500 font-bold flex justify-center items-center gap-1.5">
-                          <Sparkles size={12} className="fill-amber-500" /> {t('habits.maxLevel')}
+                        <div className="text-[10px] text-center text-amber-500 font-bold flex justify-center items-center gap-1">
+                          <Sparkles size={10} className="fill-amber-500" /> {t('habits.maxLevel')}
                         </div>
                       )}
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Plant Container with Hover Effects */}
+                {/* Plant — BIGGER */}
                 <div
-                  className="relative group-hover:-translate-y-2 transition-transform duration-300"
-                  onClick={() => handlePlantClick(habit.id, isHandled, isQuit)}
+                  className="relative"
+                  onClick={() => handlePlantClick(habit.id, !!habit.checkedToday)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlantClick(habit.id, isHandled, isQuit); }
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePlantClick(habit.id, !!habit.checkedToday); }
                   }}
                   tabIndex={0}
                   role="button"
                   aria-label={habit.title}
                   aria-expanded={isSelected}
                 >
-                  <div className="origin-bottom transform-gpu drop-shadow-2xl">
+                  {/* Scale up plants by wrapping in a larger container */}
+                  <div className="scale-[1.4] origin-bottom transform-gpu">
                     <HabitPlant
                       level={state.visualLevel}
                       isDormant={state.isDormant}
@@ -294,16 +258,15 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                         {[0, 1, 2, 3, 4, 5, 6, 7].map((p) => (
                           <motion.span
                             key={p}
-                            className="absolute left-1/2 top-10 w-2.5 h-2.5 rounded-full bg-[#4ADE80]"
-                            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                            className="absolute left-1/2 top-8 w-2 h-2 rounded-full bg-[#4ADE80]"
+                            initial={{ x: 0, y: 0, opacity: 1 }}
                             animate={{
-                              x: Math.cos((p / 8) * Math.PI * 2) * 45,
-                              y: Math.sin((p / 8) * Math.PI * 2) * 45 - 20,
+                              x: Math.cos((p / 8) * Math.PI * 2) * 32,
+                              y: Math.sin((p / 8) * Math.PI * 2) * 32 - 12,
                               opacity: 0,
-                              scale: 0.5
                             }}
-                            transition={{ duration: 0.8, ease: "easeOut" }}
-                            style={{ boxShadow: "0 0 15px #4ADE80" }}
+                            transition={{ duration: 0.7, ease: "easeOut" }}
+                            style={{ boxShadow: "0 0 10px #4ADE80" }}
                           />
                         ))}
                       </>
@@ -311,55 +274,41 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
                   </AnimatePresence>
                 </div>
 
-                {/* Info Container */}
-                <div className="flex flex-col items-center w-full mt-2 gap-2">
-                  <div className="text-xs font-medium text-foreground text-center truncate w-full px-2" title={habit.title}>
-                    {habit.icon} {habit.title}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Streak badge */}
-                    {(habit.streak?.current_streak || 0) > 0 && (
-                      <div className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-bold flex items-center gap-1 border border-orange-500/20 shadow-sm">
-                        🔥 {habit.streak?.current_streak || 0}
-                      </div>
-                    )}
-
-                    {/* Check button */}
-                    <motion.button
-                      whileTap={{ scale: 0.82 }}
-                      onClick={(e) => handleActionClick(e, habit, isHandled)}
-                      aria-label={isHandled ? `إلغاء ${habit.title}` : `إنجاز ${habit.title}`}
-                      className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 border shadow-md ${
-                        habit.frozenToday
-                            ? "bg-blue-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.4)] text-blue-400"
-                            : isHandled
-                              ? `border-transparent text-foreground`
-                              : "border-border hover:bg-foreground/10 hover:border-foreground/30 text-muted-foreground"
-                        }`}
-                      style={
-                        !habit.frozenToday && isHandled
-                          ? {
-                              backgroundColor: COLORS[habit.color] || "#22C55E",
-                              boxShadow: `0 0 15px ${COLORS[habit.color] || "#22C55E"}90`,
-                            }
-                          : {}
-                      }
-                    >
-                      <AnimatePresence>
-                        {habit.frozenToday ? (
-                          <motion.span initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }}>
-                            <Snowflake size={14} strokeWidth={2.5} />
-                          </motion.span>
-                        ) : isHandled ? (
-                          <motion.span initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }}>
-                            {isQuit ? <Shield size={14} strokeWidth={2.5} /> : <Check size={14} strokeWidth={3} />}
-                          </motion.span>
-                        ) : null}
-                      </AnimatePresence>
-                    </motion.button>
-                  </div>
+                {/* Habit name */}
+                <div className="text-[10px] text-muted-foreground text-center truncate w-full px-1 leading-snug" title={habit.title}>
+                  {habit.icon} {habit.title}
                 </div>
+
+                {/* Streak badge */}
+                {(habit.streak?.current_streak || 0) > 0 && (
+                  <div className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 flex items-center gap-0.5 border border-orange-500/20">
+                    🔥 {habit.streak?.current_streak || 0}
+                  </div>
+                )}
+
+                {/* Check button */}
+                <motion.button
+                  whileTap={{ scale: 0.82 }}
+                  onClick={(e) => handleActionClick(e, habit.id, !!habit.checkedToday)}
+                  aria-label={habit.checkedToday ? `إلغاء ${habit.title}` : `إنجاز ${habit.title}`}
+                  className={`relative w-7 h-7 rounded-full flex items-center justify-center transition border shadow-lg ${
+                    habit.checkedToday
+                      ? "bg-primary border-primary shadow-[0_0_14px_rgba(34,197,94,0.5)] text-primary-foreground"
+                      : "border-border hover:bg-foreground/10 hover:border-border text-muted-foreground"
+                  }`}
+                >
+                  <AnimatePresence>
+                    {habit.checkedToday && (
+                      <motion.span
+                        initial={{ scale: 0, rotate: -90 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Check size={13} strokeWidth={3} />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               </motion.div>
             );
           })}

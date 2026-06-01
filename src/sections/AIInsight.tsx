@@ -50,7 +50,7 @@ export default function AIInsight() {
         <motion.div
           animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.06, 1] }}
           transition={{ duration: 4, repeat: Infinity }}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-foreground"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white"
           style={{
             background: "linear-gradient(135deg, #15803D, #4ADE80)",
             boxShadow: "0 0 20px rgba(34,197,94,0.5)",
@@ -80,7 +80,7 @@ export default function AIInsight() {
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setApplied(true)}
-          className="px-4 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition hover:scale-[1.02] text-foreground"
+          className="px-4 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition hover:scale-[1.02] text-white"
           style={{
             background: applied
               ? "linear-gradient(135deg, #4ADE80, #22C55E)"

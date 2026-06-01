@@ -122,8 +122,8 @@ export default function AuthPage({ onSuccess }: AuthPageProps) {
           >
             ∞
           </motion.div>
-          <h1 className="text-3xl font-bold text-foreground mb-1">Zenith</h1>
-          <p className="text-sm text-muted-foreground">نظام حياتك المتكامل</p>
+          <h1 className="text-3xl font-bold text-white mb-1">Zenith</h1>
+          <p className="text-sm text-[#647067]">نظام حياتك المتكامل</p>
         </div>
 
         {/* Card */}
@@ -203,7 +203,7 @@ export default function AuthPage({ onSuccess }: AuthPageProps) {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#647067] hover:text-white transition"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -255,7 +255,7 @@ export default function AuthPage({ onSuccess }: AuthPageProps) {
             </motion.button>
           </form>
 
-          <p className="text-center text-[11px] text-muted-foreground mt-6">
+          <p className="text-center text-[11px] text-[#647067] mt-6">
             بياناتك محمية بتشفير كامل ولا يمكن لأحد الوصول إليها
           </p>
         </div>
@@ -292,7 +292,7 @@ function InputField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required
-        className="flex-1 bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
+        className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#647067]"
         style={{ direction: "rtl" }}
       />
     </div>

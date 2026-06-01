@@ -12,7 +12,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false);
   const draggingSidebar = useRef(false);
   const { dir } = useDirection();
-  const { addHabitAsync, deleteHabit, updateHabitAsync, habits } = useHabits(new Date());
+  const { addHabitAsync, deleteHabit, habits } = useHabits();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -90,9 +90,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
               if (found) {
                 await deleteHabit(found.id);
               }
-            }}
-            onUpdateHabit={async (id, updates) => {
-              await updateHabitAsync(id, updates);
             }}
           />
         </div>

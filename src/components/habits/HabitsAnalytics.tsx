@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { PrintableReport } from "./PrintableReport";
-import { calculateDayProgress } from "@/lib/habitCalculations";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -43,7 +42,20 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
 
       const isFuture = d > new Date(new Date().setHours(23,59,59,999));
       
-      const { completedGood, avoidedBad, totalSuccess, percentage } = calculateDayProgress(habits, dateStr, isFuture);
+      let completedGood = 0;
+      goodHabits.forEach(h => {
+        if (!h.freezes?.has(dateStr) && h.checkins?.has(dateStr)) completedGood++;
+      });
+      
+      let avoidedBad = 0;
+      badHabits.forEach(h => {
+        if (!h.freezes?.has(dateStr) && h.checkins?.has(dateStr)) avoidedBad++;
+      });
+
+      const totalSuccess = completedGood + avoidedBad;
+      const activeGood = goodHabits.filter(h => !h.freezes?.has(dateStr)).length;
+      const activeBad = badHabits.filter(h => !h.freezes?.has(dateStr)).length;
+      const totalItems = activeGood + activeBad;
 
       result.push({
         name: `${i}`,
@@ -51,7 +63,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         الإنجاز: totalSuccess,
         "عادات جيدة": completedGood,
         "تجنب سيئة": avoidedBad,
-        percentage
+        percentage: (totalItems > 0 && !isFuture) ? Math.round((totalSuccess / totalItems) * 100) : 0
       });
     }
     return result;
@@ -138,7 +150,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
           🛡️ بطاقة إنقاذ
         </motion.button>
       ) : recoveryUsed ? (
-        <div className="mt-1 text-[10px] text-foreground/30 text-center">✓ استُخدمت هذا الشهر</div>
+        <div className="mt-1 text-[10px] text-white/30 text-center">✓ استُخدمت هذا الشهر</div>
       ) : null,
     },
     {
@@ -167,6 +179,15 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     },
   ], [bestStreak, perfectDays, totalCheckinsThisMonth, averageCompletion, recoveryUsed, recoveryLoading, habits]);
 
+  const badHabitsStats = useMemo(() => {
+    const badHabits = habits.filter(h => h.habit_type === 'quit');
+    const totalAvoided = monthlyData.reduce((sum: number, d: any) => sum + d["تجنب سيئة"], 0);
+    return [
+      { label: "عادات سيئة متتبعة", value: badHabits.length },
+      { label: "مرات التجنب هذا الشهر", value: totalAvoided },
+      { label: "أكثر عادة سيئة التزاماً", value: badHabits.sort((a,b) => (b.streak?.current_streak || 0) - (a.streak?.current_streak || 0))[0]?.title || "لا يوجد" }
+    ];
+  }, [habits, monthlyData]);
 
   const monthsStats = useMemo(() => {
     const realNow = new Date();
@@ -193,8 +214,11 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             const dd = String(i).padStart(2, "0");
             const str = `${y}-${mm}-${dd}`;
             
-            const isFuture = new Date(y, m, i) > new Date(new Date().setHours(23,59,59,999));
-            const { totalSuccess: dayScore } = calculateDayProgress(habits, str, isFuture);
+            let curGood = 0;
+            goodHabits.forEach(h => { if (!h.freezes?.has(str) && h.checkins?.has(str)) curGood++; });
+            let curAvoided = 0;
+            badHabits.forEach(h => { if (!h.freezes?.has(str) && h.checkins?.has(str)) curAvoided++; });
+            const dayScore = curGood + curAvoided;
             
             totalScore += dayScore;
             // When calculating limited score for fair comparison, we use the realNow.getDate() as limit
@@ -205,7 +229,6 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         return { 
            limitedScore, 
            totalScore,
-           maxPossible: Math.max(habits.length * maxDays, 1),
            name: targetDate.toLocaleDateString('ar-EG', { month: 'long', year: targetDate.getFullYear() !== realNow.getFullYear() ? 'numeric' : undefined }),
            limited: limitToRealCurrentDay,
            limitDay: limit,
@@ -231,107 +254,79 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     return list;
   }, [habits, currentDate]);
 
+  const maxScore = useMemo(() => Math.max(...monthsStats.map(m => m.limitedScore), 1), [monthsStats]);
+
   const generateAIReport = async () => {
     if (aiLoading) return;
     setAiLoading(true);
     setAiError(false);
 
+    const selectedMonthName = currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+    const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() &&
+      currentDate.getFullYear() === new Date().getFullYear();
+
+    const ctx = JSON.stringify(monthsStats.slice(0, 6).map(m => ({
+      name: m.name,
+      limitedScore: m.limitedScore,
+      totalScore: m.totalScore,
+      limitDay: m.limitDay,
+      isRealCurrent: m.isRealCurrent
+    })));
+
+    const totalHabits = habits.length;
+    const goodHabits = habits.filter(h => h.habit_type !== 'quit').length;
+    const quitHabits = habits.filter(h => h.habit_type === 'quit').length;
+
+    const prompt = `أنت زينيث AI، مساعد التطوير الشخصي. قم بتحليل أداء المستخدم في عاداته للشهر: ${selectedMonthName}${isCurrentMonth ? ' (الشهر الجاري)' : ''}.
+
+معلومات العادات: ${totalHabits} عادة إجمالاً (${goodHabits} عادة إيجابية، ${quitHabits} عادة يريد تركها).
+
+بيانات الأداء الشهري (limitedScore = الإنجازات حتى نفس اليوم لمقارنة عادلة):
+${ctx}
+
+ملاحظة: "limitedScore" يقيس الإنجاز في أول (limitDay) يوم من كل شهر لضمان مقارنة عادلة.
+
+اكتب تقريراً موجزاً من 3-4 نقاط:
+1. تقييم أداء شهر ${selectedMonthName} تحديداً مقارنةً بالأشهر السابقة.
+2. أبرز نقاط القوة والضعف في هذه الفترة.
+3. نصيحة عملية واحدة محددة لتحسين الأداء.
+4. تشجيع قوي ومختصر.
+تحدث بأسلوب مدرب شخصي داعم، ولا تستخدم JSON أبداً.`;
+
     try {
-      // محاكاة معالجة بيانات عميقة
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
+      if (!apiKey) {
+        toast.error("مفتاح الذكاء الاصطناعي غير متوفر.");
+        setAiLoading(false);
+        return;
+      }
 
-      const goodHabits = habits.filter(h => h.habit_type !== 'quit');
-      const quitHabits = habits.filter(h => h.habit_type === 'quit');
+      const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistral-large-latest",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.7,
+          max_tokens: 600,
+        }),
+      });
       
-      const scoreTrend = (monthsStats.length >= 2 && monthsStats[1].limitedScore > 0)
-         ? ((monthsStats[0].limitedScore - monthsStats[1].limitedScore) / monthsStats[1].limitedScore) * 100
-         : 100;
-         
-      const isUp = scoreTrend > 0;
-      const isDown = scoreTrend < 0;
+      if (!res.ok) {
+        throw new Error(`HTTP Error: ${res.status}`);
+      }
       
-      // Momentum calculation (Algorithm)
-      const momentumScore = Math.min(100, Math.round((averageCompletion + (perfectDays * 5))));
-      let momentumText = "";
-      if (momentumScore >= 80) momentumText = "🔥 زخم ناري (تدفق عالٍ)";
-      else if (momentumScore >= 50) momentumText = "⚡ زخم متصاعد (إيجابي)";
-      else if (momentumScore >= 30) momentumText = "🌱 زخم في طور البناء";
-      else momentumText = "⚠️ انخفاض في الزخم";
-
-      let insight = `[ تقرير زينيث التحليلي المتقدم ]\n`;
-      insight += `الزمن: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n`;
-
-      // 1. Executive Summary
-      insight += `📊 1. مؤشرات الأداء العام:\n`;
-      insight += `• مؤشر الزخم الحالي: ${momentumScore}/100 [ ${momentumText} ]\n`;
-      if (isUp) {
-        insight += `• المسار: نمو حقيقي بنسبة +${Math.round(scoreTrend)}% في وتيرة الإنجاز مقارنة بنفس الفترة من الشهر الماضي.\n`;
-      } else if (isDown) {
-        insight += `• المسار: انحراف سلبي بنسبة ${Math.round(Math.abs(scoreTrend))}% مقارنة بالشهر الماضي. (فرصة لتصحيح المسار فوراً)\n`;
-      } else {
-        insight += `• المسار: استقرار تام (0% تغيير). الثبات هو أساس الانضباط.\n`;
-      }
-      insight += `• معدل الجودة: ${perfectDays} أيام مثالية (نسبة نجاح 100%).\n\n`;
-
-      // 2. Deep Dive: Streaks & Winners
-      insight += `🏆 2. تحليل نقاط القوة (القمة):\n`;
-      const activeGood = [...goodHabits].filter(h => (h.streak?.current_streak || 0) > 0).sort((a,b) => (b.streak?.current_streak||0) - (a.streak?.current_streak||0));
-      if (activeGood.length > 0) {
-        insight += `• الالتزام الحديدي: "${activeGood[0].title}" تتصدر بسلسلة ${activeGood[0].streak?.current_streak} أيام متتالية. المسارات العصبية لهذه العادة أصبحت شبه تلقائية الآن.\n`;
-      }
-      const perfectQuit = [...quitHabits].filter(h => (h.streak?.current_streak || 0) >= 3).sort((a,b) => (b.streak?.current_streak||0) - (a.streak?.current_streak||0));
-      if (perfectQuit.length > 0) {
-        insight += `• السيطرة الذاتية: قدرتك على كبح "${perfectQuit[0].title}" لمدة ${perfectQuit[0].streak?.current_streak} أيام تثبت أنك تتحكم برغباتك بشكل ممتاز.\n`;
-      }
-      if (activeGood.length === 0 && perfectQuit.length === 0) {
-        insight += `• قيد المعايرة: جميع سلاسلك في المرحلة التأسيسية. كل يوم جديد هو فرصة لصنع زخم.\n`;
-      }
-      insight += `\n`;
-
-      // 3. Deep Dive: Weak Points & Relapses
-      insight += `🔍 3. تحليل الفجوات والانكسارات:\n`;
-      const brokenGood = [...goodHabits].filter(h => (h.streak?.current_streak || 0) === 0 && (h.streak?.longest_streak || 0) > 0);
-      const brokenQuit = [...quitHabits].filter(h => (h.streak?.current_streak || 0) === 0);
+      const data = await res.json();
       
-      let hasGaps = false;
-      if (brokenGood.length > 0) {
-         hasGaps = true;
-         insight += `• تسرب الطاقة: عادة "${brokenGood[0].title}" متوقفة حالياً. ترك عاداتك الإيجابية يرسل إشارة للعقل الباطن بقبول التنازلات.\n`;
-      }
-      if (brokenQuit.length > 0) {
-         hasGaps = true;
-         const relapsedHabit = brokenQuit[0];
-         // Search for the last logged reason for this specific quit habit
-         const lastLog = relapsedHabit.relapseLogs && relapsedHabit.relapseLogs.length > 0 
-              ? relapsedHabit.relapseLogs[relapsedHabit.relapseLogs.length - 1].reason 
-              : null;
-         
-         if (lastLog) {
-            insight += `• تحليل الانتكاسة ("${relapsedHabit.title}"): تم رصد سبب الانتكاسة وهو: "${lastLog}". هذا النمط يحتاج إلى استراتيجية وقائية لكسر المحفز.\n`;
-         } else {
-            insight += `• تحليل الانتكاسة: رصد تعثر في "${relapsedHabit.title}". الانتكاس هو مجرد "بيانات" لتعديل استراتيجيتك، وليس حكماً بالفشل.\n`;
-         }
-      }
-      if (!hasGaps) {
-         insight += `• النقاء: نظامك خالٍ من الفجوات النشطة حالياً. أنت تعيش حالة (Flow State) مستقرة.\n`;
-      }
-      insight += `\n`;
-
-      // 4. Algorithm Recommendation
-      insight += `🎯 4. التوجيه الاستراتيجي:\n`;
-      if (hasGaps) {
-         const target = brokenGood.length > 0 ? brokenGood[0].title : (brokenQuit[0]?.title || 'العودة للمسار');
-         insight += `القرار: تطبيق قاعدة "الدقيقتين" فوراً على [ ${target} ].\nلا تفكر في الإنجاز الكامل اليوم، بل التزم فقط بالاحتكاك بها لمدة دقيقتين لكسر المقاومة النفسية، وإعادة بناء الهوية.\n`;
-      } else {
-         insight += `القرار: تصعيد المعايير.\nبما أنك تتقن قائمة عاداتك الحالية، النظام يوصي بتحسين "جودة" التطبيق غداً بدلاً من زيادة الكمية. أنت في مرحلة التطوير العميق.\n`;
-      }
-
-      setAiInsight(insight);
-      toast.success("تم توليد التقرير المتقدم!", { style: { background: '#333', color: '#fff' } });
+      setAiInsight(data.choices?.[0]?.message?.content ?? null);
+      toast.success("تم الانتهاء من التحليل!", { style: { background: '#333', color: '#fff' } });
     } catch (err: any) {
       setAiError(true);
       console.error("AI report error:", err);
-      toast.error("فشل التحليل. يرجى المحاولة لاحقاً.", { style: { background: '#333', color: '#fff' } });
+      toast.error("فشل الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.", { style: { background: '#333', color: '#fff' } });
     } finally {
       setAiLoading(false);
     }
@@ -380,15 +375,15 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         className="space-y-6 print:hidden"
         id="analytics-report"
       >
-      <div className="glass rounded-3xl p-6 border border-border relative overflow-hidden">
+      <div className="glass rounded-3xl p-6 border border-white/[0.06] relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-border">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/10">
               <BarChart3 className="text-blue-400" size={26} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 تقرير شهر {currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
               </h2>
               <p className={`text-sm mt-0.5 ${isPositive ? 'text-green-400' : 'text-orange-400'}`}>
@@ -400,7 +395,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="flex items-center gap-2 px-5 py-2.5 bg-foreground/5 hover:bg-foreground/10 rounded-xl border border-border text-foreground font-bold text-sm transition"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 text-white font-bold text-sm transition"
             >
               {isExporting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Printer size={18} />}
               تصدير PDF
@@ -413,14 +408,14 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
               {aiLoading ? <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" /> : <Brain size={18} />}
               تحليل بالذكاء الاصطناعي
               
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-border rounded-lg text-xs text-foreground text-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-white/10 rounded-lg text-xs text-white text-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                 يقوم الذكاء الاصطناعي بتحليل أدائك وتقديم نصائح لتحسين التزامك.
               </div>
             </button>
-            <div className="flex items-center gap-2 px-4 py-2 bg-foreground/5 rounded-xl border border-border">
-              <Calendar size={16} className="text-muted-foreground" />
-              <span className="text-sm text-foreground/70">
-                متوسط الإنجاز: <span className="font-bold text-foreground">{averageCompletion}%</span>
+            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/10">
+              <Calendar size={16} className="text-[#A7B3AB]" />
+              <span className="text-sm text-white/70">
+                متوسط الإنجاز: <span className="font-bold text-white">{averageCompletion}%</span>
               </span>
             </div>
           </div>
@@ -443,14 +438,14 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
                     <Brain size={18} />
                     تحليل زينيث AI
                   </div>
-                  <button onClick={() => { setAiInsight(null); setAiError(false); }} className="text-foreground/40 hover:text-foreground transition" data-html2canvas-ignore>
+                  <button onClick={() => { setAiInsight(null); setAiError(false); }} className="text-white/40 hover:text-white transition" data-html2canvas-ignore>
                     <X size={16} />
                   </button>
                 </div>
                 {aiError ? (
                   <p className="text-red-400 text-sm">حدث خطأ أثناء الاتصال. يرجى المحاولة لاحقاً.</p>
                 ) : (
-                  <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                  <div className="text-sm text-[#A7B3AB] leading-relaxed whitespace-pre-wrap">
                     {aiInsight}
                   </div>
                 )}
@@ -467,16 +462,16 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 + i * 0.05 }}
-            className="glass rounded-2xl p-5 border border-border flex flex-col gap-2 group hover:bg-foreground/[0.04] transition-all duration-300"
+            className="glass rounded-2xl p-5 border border-white/[0.06] flex flex-col gap-2 group hover:bg-white/[0.02] transition-all duration-300"
           >
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.iconBg} flex items-center justify-center ${stat.iconColor} shrink-0 group-hover:scale-110 transition-transform`}>
                 {stat.icon}
               </div>
               <div>
-                <div className="text-muted-foreground text-xs mb-0.5">{stat.label}</div>
-                <div className="text-2xl font-black text-foreground flex items-baseline gap-1">
-                  {stat.value} <span className="text-sm font-normal text-muted-foreground">{stat.unit}</span>
+                <div className="text-[#A7B3AB] text-xs mb-0.5">{stat.label}</div>
+                <div className="text-2xl font-black text-white flex items-baseline gap-1">
+                  {stat.value} <span className="text-sm font-normal text-[#A7B3AB]">{stat.unit}</span>
                 </div>
               </div>
             </div>
@@ -487,76 +482,71 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         ))}
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {badHabitsStats.map((stat: any, i: number) => (
+          <motion.div
+            key={i}
+            className="glass rounded-2xl p-4 border border-white/[0.06] flex items-center justify-between"
+          >
+            <span className="text-white/70 text-sm">{stat.label}</span>
+            <span className="text-white font-bold">{stat.value}</span>
+          </motion.div>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass rounded-3xl p-6 border border-border relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-          <h3 className="text-sm font-bold text-foreground mb-6 flex items-center gap-2">
-            <div className="p-1.5 bg-green-500/10 rounded-lg">
-              <TrendingUp size={16} className="text-green-400" />
-            </div>
+        <div className="glass rounded-3xl p-6 border border-white/[0.06]">
+          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <TrendingUp size={16} className="text-green-400" />
             مخطط الإنجاز اليومي
           </h3>
-          <div className="h-[260px] w-full relative z-10" dir="ltr">
+          <div className="h-[250px] w-full" dir="ltr">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorGood" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4ADE80" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#4ADE80" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorBad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, Math.max(habits.length, 4)]} />
+              <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis dataKey="name" stroke="rgba(255,255,255,0.25)" fontSize={10} tickMargin={8} axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(255,255,255,0.25)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: 'rgba(19, 24, 21, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)' }}
-                  itemStyle={{ color: '#ffffff', fontWeight: 'bold' }}
-                  labelStyle={{ color: '#A7B3AB', marginBottom: '8px' }}
+                  contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
+                  itemStyle={{ color: '#ffffff' }}
+                  labelStyle={{ color: '#A7B3AB', marginBottom: '6px' }}
                 />
-                <Legend verticalAlign="top" height={40} iconType="circle" wrapperStyle={{ fontSize: '13px', color: '#fff', opacity: 0.8 }} />
-                <Area type="monotone" name="عادات جيدة" dataKey="عادات جيدة" stroke="#4ADE80" strokeWidth={3} fillOpacity={1} fill="url(#colorGood)" activeDot={{ r: 6, fill: '#4ADE80', stroke: '#131815', strokeWidth: 3 }} />
-                <Area type="monotone" name="تجنب سيئة" dataKey="تجنب سيئة" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorBad)" activeDot={{ r: 6, fill: '#EF4444', stroke: '#131815', strokeWidth: 3 }} />
-              </AreaChart>
+                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#fff' }} />
+                <Line type="monotone" name="عادات جيدة" dataKey="عادات جيدة" stroke="#4ADE80" strokeWidth={3} dot={false} activeDot={{ r: 5, fill: '#4ADE80', stroke: '#000', strokeWidth: 2 }} />
+                <Line type="monotone" name="تجنب سيئة" dataKey="تجنب سيئة" stroke="#EF4444" strokeWidth={4} dot={false} activeDot={{ r: 6, fill: '#EF4444', stroke: '#000', strokeWidth: 2 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="glass rounded-3xl p-6 border border-border relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-bl from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-          <h3 className="text-sm font-bold text-foreground mb-6 flex items-center gap-2">
-            <div className="p-1.5 bg-blue-500/10 rounded-lg">
-              <BarChart3 size={16} className="text-blue-400" />
-            </div>
+        <div className="glass rounded-3xl p-6 border border-white/[0.06]">
+          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <BarChart3 size={16} className="text-blue-400" />
             أداء كل عادة هذا الشهر
           </h3>
-          <div className="h-[260px] w-full relative z-10" dir="ltr">
+          <div className="h-[250px] w-full" dir="ltr">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={habitStats} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                 <XAxis
                   dataKey="icon"
-                  stroke="rgba(255,255,255,0.4)"
-                  fontSize={16}
-                  tickMargin={12}
+                  stroke="rgba(255,255,255,0.25)"
+                  fontSize={14}
+                  tickMargin={8}
                   axisLine={false}
                   tickLine={false}
                 />
-                <YAxis stroke="rgba(255,255,255,0.4)" fontSize={11} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis stroke="rgba(255,255,255,0.25)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }}
-                  contentStyle={{ backgroundColor: 'rgba(19, 24, 21, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)' }}
-                  labelStyle={{ color: '#8B9A90', marginBottom: '6px' }}
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                  contentStyle={{ backgroundColor: '#131815', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+                  labelStyle={{ color: '#8B9A90', marginBottom: '4px' }}
                   itemStyle={{ color: '#fff', fontWeight: 'bold' }}
                   formatter={(value: number) => [`${value} مرة`, "الإنجاز"]}
                 />
-                <Bar dataKey="checkins" radius={[8, 8, 0, 0]} maxBarSize={45}>
+                <Bar dataKey="checkins" radius={[6, 6, 0, 0]} maxBarSize={35}>
                   {habitStats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={HABIT_COLORS[entry.color] || '#4ADE80'} fillOpacity={0.9} />
+                    <Cell key={`cell-${index}`} fill={HABIT_COLORS[entry.color] || '#4ADE80'} fillOpacity={0.7} />
                   ))}
                 </Bar>
               </BarChart>
@@ -569,22 +559,17 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="glass rounded-3xl p-6 md:p-8 border border-border relative overflow-hidden"
+          className="glass rounded-3xl p-6 border border-white/[0.06]"
         >
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
-          
-          <div className="flex items-center justify-between mb-8 relative z-10">
-            <h3 className="text-base font-bold text-foreground flex items-center gap-3">
-              <div className="p-2 bg-foreground/5 rounded-xl border border-border">
-                <Calendar size={18} className="text-foreground/80" />
-              </div>
-              مقارنة الأداء بالشهور
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              📊 مقارنة الأداء بالشهور
             </h3>
             <div className="flex items-center gap-2" data-html2canvas-ignore>
               {monthsStats.length > 2 && (
                 <button 
                   onClick={() => setShowMoreMonths(!showMoreMonths)}
-                  className="text-xs text-blue-300 hover:text-foreground font-bold bg-blue-500/10 hover:bg-blue-500/20 px-4 py-2 rounded-full border border-blue-500/20 transition-all duration-300 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
+                  className="text-xs text-blue-400 hover:text-blue-300 font-bold bg-blue-400/10 px-3 py-1 rounded-full transition-colors"
                 >
                   {showMoreMonths ? "عرض أقل" : "عرض المزيد"}
                 </button>
@@ -592,37 +577,28 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             </div>
           </div>
 
-          <div className="space-y-6 relative z-10">
+          <div className="space-y-5">
             {monthsStats.slice(0, showMoreMonths ? monthsStats.length : 2).map((mStat, idx) => (
-              <div key={idx} className="group">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground/90 flex items-center gap-2">
-                    {mStat.name} 
-                    {mStat.isRealCurrent && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">الحالي</span>}
-                    {mStat.limited && !mStat.isRealCurrent && <span className="text-xs text-foreground/40">(حتى اليوم {mStat.limitDay})</span>}
+              <div key={idx}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-white/80">
+                    {mStat.name} {mStat.isRealCurrent ? "(الحالي)" : ""} 
+                    {mStat.limited && !mStat.isRealCurrent ? <span className="text-xs text-white/40 mr-1">(حتى اليوم {mStat.limitDay})</span> : ""}
                   </span>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-base font-black ${idx === 0 ? 'text-green-400' : 'text-blue-400'} drop-shadow-md flex items-baseline gap-1`}>
-                      {mStat.limitedScore} 
-                      <span className="text-[11px] text-foreground/40 font-normal">/ {mStat.maxPossible} إنجاز</span>
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold ${idx === 0 ? 'text-green-400' : 'text-blue-400'}`}>{mStat.limitedScore} إنجاز</span>
                     {mStat.totalScore > mStat.limitedScore && (
-                      <span className="text-xs text-foreground/30 hidden sm:inline-block bg-foreground/5 px-2 py-1 rounded-md">إجمالي الشهر: {mStat.totalScore}</span>
+                      <span className="text-[10px] text-white/30 hidden sm:inline-block">إجمالي الشهر: {mStat.totalScore}</span>
                     )}
                   </div>
                 </div>
-                <div className="h-5 bg-background rounded-full overflow-hidden p-1 shadow-inner border border-border">
+                <div className="h-4 bg-white/5 rounded-full overflow-hidden">
                   <motion.div
-                    className={`h-full rounded-full relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
-                    style={{
-                      boxShadow: idx === 0 ? '0 0 15px rgba(74,222,128,0.4)' : '0 0 15px rgba(59,130,246,0.4)'
-                    }}
+                    className={`h-full rounded-full bg-gradient-to-r ${idx === 0 ? 'from-green-500 to-emerald-400' : 'from-blue-500 to-cyan-400'}`}
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.min((mStat.limitedScore / mStat.maxPossible) * 100, 100)}%` }}
+                    animate={{ width: `${Math.min((mStat.limitedScore / maxScore) * 100, 100)}%` }}
                     transition={{ duration: 1, ease: "easeOut", delay: 0.5 + (idx * 0.1) }}
-                  >
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent_100%)] bg-[length:16px_16px] opacity-50" />
-                  </motion.div>
+                  />
                 </div>
               </div>
             ))}

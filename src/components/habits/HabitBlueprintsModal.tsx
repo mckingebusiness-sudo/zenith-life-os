@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Check } from "lucide-react";
+import { X, Sparkles, Check, Trash } from "lucide-react";
 import { Habit } from "@/hooks/useHabits";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
 
 type Props = {
   isOpen: boolean;
@@ -201,55 +200,34 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [customBlueprints, setCustomBlueprints] = useState<any[]>([]);
-  const [doneTimer, setDoneTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Load custom templates when modal opens
   useEffect(() => {
     if (isOpen) {
-      void loadCustomBlueprints();
+      try {
+        const stored = localStorage.getItem('zenith_custom_templates');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setCustomBlueprints(parsed.map((p: any) => ({
+            id: p.id,
+            title: p.name,
+            icon: "⭐",
+            color: "amber",
+            description: "قالب مخصص",
+            habits: p.habits.map((h: any) => ({
+              title: h.title,
+              icon: h.icon,
+              color: h.color,
+              habit_type: h.type || h.habit_type || 'good'
+            })),
+            isCustom: true
+          })));
+        }
+      } catch (e) {
+        console.error("Failed to load custom templates", e);
+      }
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    return () => {
-      if (doneTimer) clearTimeout(doneTimer);
-    };
-  }, [doneTimer]);
-
-  const loadCustomBlueprints = async () => {
-    try {
-      const { data: authData } = await supabase.auth.getSession();
-      if (!authData.session) {
-        setCustomBlueprints([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("habit_templates")
-        .select("id, name, habits")
-        .eq("user_id", authData.session.user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      setCustomBlueprints((data || []).map((p: any) => ({
-        id: p.id,
-        title: p.name,
-        icon: "⭐",
-        color: "amber",
-        description: "قالب مخصص",
-        habits: (p.habits || []).map((h: any) => ({
-          title: h.title,
-          icon: h.icon,
-          color: h.color,
-          habit_type: h.type || h.habit_type || "good",
-        })),
-        isCustom: true,
-      })));
-    } catch (e) {
-      console.error("Failed to load custom templates", e);
-    }
-  };
 
   const applyBlueprint = async (bp: typeof BLUEPRINTS[0] | any) => {
     setLoading(bp.id);
@@ -271,11 +249,9 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
       }
       toast.success(`تم إضافة عادات ${bp.title} بنجاح!`);
       setDone(bp.id);
-      if (doneTimer) clearTimeout(doneTimer);
-      const timer = setTimeout(() => {
+      setTimeout(() => {
         setDone(null);
       }, 1500);
-      setDoneTimer(timer);
     } catch (e) {
       console.error(e);
       toast.error('حدث خطأ أثناء إضافة العادات — حاول مرة أخرى');
@@ -299,25 +275,25 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="glass rounded-3xl w-full max-w-2xl border border-border overflow-hidden"
+          className="glass rounded-3xl w-full max-w-2xl border border-white/10 overflow-hidden"
         >
           {/* Header */}
-          <div className="p-6 border-b border-border flex items-center justify-between relative overflow-hidden">
+          <div className="p-6 border-b border-white/10 flex items-center justify-between relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-blue-500/10" />
             <div className="relative flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/10 flex items-center justify-center">
                 <Sparkles size={18} className="text-green-400" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-foreground">قوالب العادات الجاهزة</h2>
-                <p className="text-xs text-foreground/50">أضف حزمة عادات كاملة بضغطة واحدة</p>
+                <h2 className="text-lg font-bold text-white">قوالب العادات الجاهزة</h2>
+                <p className="text-xs text-white/50">أضف حزمة عادات كاملة بضغطة واحدة</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="relative w-8 h-8 rounded-xl bg-foreground/5 hover:bg-foreground/10 flex items-center justify-center transition"
+              className="relative w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition"
             >
-              <X size={16} className="text-foreground/60" />
+              <X size={16} className="text-white/60" />
             </button>
           </div>
 
@@ -328,14 +304,14 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
               <motion.div
                 key={bp.id}
                 whileHover={{ scale: 1.01 }}
-                className="border border-border rounded-2xl p-5 bg-foreground/[0.04] hover:bg-foreground/[0.05] transition group"
+                className="border border-white/10 rounded-2xl p-5 bg-white/[0.02] hover:bg-white/[0.04] transition group"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="text-3xl">{bp.icon}</div>
                     <div>
-                      <h3 className="font-bold text-foreground text-sm">{bp.title}</h3>
-                      <p className="text-xs text-foreground/50 mt-0.5">{bp.description}</p>
+                      <h3 className="font-bold text-white text-sm">{bp.title}</h3>
+                      <p className="text-xs text-white/50 mt-0.5">{bp.description}</p>
                     </div>
                   </div>
                   <motion.button
@@ -345,7 +321,7 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
                     className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                       done === bp.id
                         ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                        : "bg-gradient-to-r from-green-600 to-emerald-600 text-foreground shadow-lg shadow-green-900/30"
+                        : "bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg shadow-green-900/30"
                     }`}
                   >
                     {done === bp.id ? (
@@ -363,7 +339,7 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
                   {bp.habits.map((h: any) => (
                     <span
                       key={h.title}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-foreground/5 border border-border text-foreground/60"
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/60"
                     >
                       {h.icon} {h.title}
                     </span>

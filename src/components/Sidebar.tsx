@@ -106,7 +106,7 @@ export default function Sidebar({
       {/* Brand + collapse toggle */}
       <div className="flex items-center gap-3 px-1 py-2">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 text-foreground"
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 text-white"
           style={{
             background: "linear-gradient(135deg, #15803D, #4ADE80)",
             boxShadow: "0 0 18px rgba(34,197,94,0.4)",
@@ -170,7 +170,7 @@ export default function Sidebar({
         )}
 
         <div className="flex items-center gap-3 px-1 py-2 rounded-xl hover:bg-foreground/5 transition cursor-pointer">
-          <div className="relative w-9 h-9 rounded-full bg-gradient-to-br from-[#15803D] to-[#4ADE80] flex items-center justify-center text-sm font-bold shrink-0 text-foreground">
+          <div className="relative w-9 h-9 rounded-full bg-gradient-to-br from-[#15803D] to-[#4ADE80] flex items-center justify-center text-sm font-bold shrink-0 text-white">
             {(profile?.full_name?.[0] || profile?.username?.[0] || "A").toUpperCase()}
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-background" />
           </div>

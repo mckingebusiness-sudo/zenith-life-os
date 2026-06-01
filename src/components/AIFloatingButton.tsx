@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Infinity as InfinityIcon, X, Send, GripVertical, Brain, BarChart3, Trash2, RefreshCw } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
-import { calculateTodayProgress } from "@/lib/habitCalculations";
 
 // ─── AITrigger ──────────────────────────────────────────────────────────────
 export function AITrigger({ onClick }: { onClick: () => void }) {
@@ -39,7 +38,7 @@ export function AITrigger({ onClick }: { onClick: () => void }) {
       >
         <InfinityIcon size={26} className="text-[#4ADE80] drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]" strokeWidth={2.4} />
       </motion.div>
-      <span className="absolute bottom-full mb-2 right-0 whitespace-nowrap text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 transition">
+      <span className="absolute bottom-full mb-2 right-0 whitespace-nowrap text-[11px] text-[#A7B3AB] opacity-0 group-hover:opacity-100 transition">
         زينيث AI · ⌘J
       </span>
     </motion.button>
@@ -108,15 +107,15 @@ function buildHabitsContext(habits: ReturnType<typeof useHabits>["habits"]) {
       streak: h.streak?.current_streak || 0,
       longestStreak: h.streak?.longest_streak || 0,
       totalCheckins: h.streak?.total_checkins || 0,
-      avoidedToday: !!(h as any).avoidedToday,
-      checkedToday: h.habit_type === 'quit' ? !h.relapsedToday : !!h.checkedToday,
+      checkedToday: h.checkedToday,
       thisMonthCheckins: monthCheckins,
       completionRateThisMonth: `${completionRate}%`,
       savedValue: (h as any).saved_value_per_day ? `${(h as any).saved_value_per_day} ${(h as any).saved_unit || ""}` : null,
     };
   });
 
-  const { totalHabits: todayTotal, handledCount: todayCompleted } = calculateTodayProgress(habits);
+  const todayCompleted = habits.filter(h => h.checkedToday).length;
+  const todayTotal = habits.length;
 
   return {
     currentDate: today,
@@ -135,8 +134,8 @@ function parseAIActions(text: string): { cleanText: string; actions: ParsedActio
   const actions: ParsedAction[] = [];
   let cleanText = text;
 
-  // Improved pattern: supports nested JSON objects like {"updates":{"title":"x"}}
-  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{(?:[^{}]|\{[^{}]*\})*\})/gi;
+  // Pattern to match [ACTION_TYPE] {json}
+  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{.*?\})/gi;
   let match;
 
   while ((match = actionRegex.exec(text)) !== null) {
@@ -190,7 +189,7 @@ const SYSTEM_PROMPT = `أنت زينيث AI — المساعد الذكي لتط
 - ممنوع منعاً باتاً عرض أي كود أو JSON للمستخدم. يجب أن يكون الرد نصياً طبيعياً فقط.
 - أسلوبك: مهني، مشجع، مختصر، مثل مدرب شخصي محترف.
 
-للقيام بإجراءات (إضافة/حذف/تعديل عادة)، لا تخبر المستخدم أنك تنفذ كود، بل رُد بشكل طبيعي (مثلاً: "تمت إضافة العادة بنجاح!") ثم ضع السطر السحري التالي في **نهاية ردك تماماً وفي سطر جديد**:
+للقيام بإجراءات (إضافة/حذف عادة)، لا تخبر المستخدم أنك تنفذ كود، بل رُد بشكل طبيعي (مثلاً: "تمت إضافة العادة بنجاح!") ثم ضع السطر السحري التالي في **نهاية ردك تماماً وفي سطر جديد**:
 
 لإضافة عادة إيجابية:
 [ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
@@ -201,11 +200,10 @@ const SYSTEM_PROMPT = `أنت زينيث AI — المساعد الذكي لتط
 للحذف:
 [ACTION_DELETE] {"title":"اسم العادة"}
 
-للتعديل (استخدم الـ title الدقيق للعادة من قائمة العادات، ولا تستخدم الـ id):
-[ACTION_UPDATE] {"title":"اسم العادة الحالي","updates":{"title":"العنوان الجديد","icon":"🎯"}}
+للتعديل:
+[ACTION_UPDATE] {"id":"habit-id","updates":{"title":"العنوان الجديد"}}
 
-- احسب نسبة الإنجاز الإجمالية بناءً على (الأيام المنقضية من الشهر) وليس الشهر كاملاً.
-- عند التعديل، حدد العادة دائماً بـ "title" الدقيق كما يظهر في قائمة العادات التي تراها.`;
+- احسب نسبة الإنجاز الإجمالية بناءً على (الأيام المنقضية من الشهر) وليس الشهر كاملاً.`;
 
 const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
 
@@ -239,13 +237,11 @@ export default function AIPanel({
   onClose,
   onAddHabit,
   onDeleteHabit,
-  onUpdateHabit,
 }: {
   open: boolean;
   onClose: () => void;
   onAddHabit?: (habit: { title: string; icon: string; color: string; habit_type?: string }) => Promise<void>;
   onDeleteHabit?: (title: string) => Promise<void>;
-  onUpdateHabit?: (id: string, updates: Partial<any>) => Promise<void>;
 }) {
   const [width, setWidth] = useState(480);
   const dragging = useRef(false);
@@ -305,28 +301,6 @@ export default function AIPanel({
           if (title) {
             await onDeleteHabit(title);
             showToast(`🗑 تم حذف: ${title}`);
-          }
-        }
-        if (action.type === "update_habit" && onUpdateHabit && action.data) {
-          // Support both id-based (old) and title-based (new) update
-          let habitId = String(action.data.id || "");
-          const titleKey = String(action.data.title || "");
-          
-          // If title is provided instead of/in addition to id, resolve id from habits list
-          if (titleKey && (!habitId || habitId === "habit-id" || habitId === "")) {
-            const found = habits.find(h => 
-              h.title.toLowerCase().trim() === titleKey.toLowerCase().trim() ||
-              h.title.toLowerCase().includes(titleKey.toLowerCase())
-            );
-            if (found) habitId = found.id;
-          }
-          
-          const updates = action.data.updates as Record<string, unknown>;
-          if (habitId && updates) {
-            await onUpdateHabit(habitId, updates);
-            showToast(`✏️ تم تعديل: ${titleKey || habitId}`);
-          } else {
-            showToast(`⚠️ لم أجد العادة للتعديل`);
           }
         }
       } catch (e) {
@@ -529,7 +503,7 @@ export default function AIPanel({
                 </motion.div>
                 <div>
                   <div className="text-sm font-bold tracking-wide">زينيث AI</div>
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                  <div className="text-[10px] text-[#647067] flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                     يصل لكل بيانات عاداتك
                   </div>
@@ -561,7 +535,7 @@ export default function AIPanel({
                 </motion.button>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-lg hover:bg-foreground/10 flex items-center justify-center transition"
+                  className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition"
                 >
                   <X size={15} />
                 </button>
@@ -570,10 +544,10 @@ export default function AIPanel({
 
             {/* Stats bar */}
             <div className="flex items-center justify-between shrink-0 px-1 border-b border-green-500/10 pb-2">
-              <span className="text-[10px] text-muted-foreground">
-                {habits.length} عادة · {habits.filter(h => h.checkedToday || h.frozenToday || (h.habit_type === 'quit' && !h.relapsedToday)).length}/{habits.length} اليوم
+              <span className="text-[10px] text-[#647067]">
+                {habits.length} عادة · {habits.filter(h => h.checkedToday).length}/{habits.length} اليوم
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-[#647067]">
                 {msgCount}/{MSG_LIMIT} رسالة
               </span>
             </div>
@@ -594,7 +568,7 @@ export default function AIPanel({
                   <div className="text-[20px] font-bold" style={{ color: "#4ADE80" }}>
                     كيف أقدر أساعدك؟
                   </div>
-                  <div className="text-[11px] text-muted-foreground max-w-[200px] leading-relaxed">
+                  <div className="text-[11px] text-[#647067] max-w-[200px] leading-relaxed">
                     أضف عادات، احذفها، أو اطلب تحليلاً شاملاً لأدائك
                   </div>
                   {/* Quick Actions */}
@@ -679,7 +653,7 @@ export default function AIPanel({
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => sendMessage(q)}
-                    className="px-3 py-1.5 rounded-full text-[11px] bg-foreground/[0.05] border border-green-500/15 hover:border-green-400/60 hover:text-[#4ADE80] transition"
+                    className="px-3 py-1.5 rounded-full text-[11px] bg-white/[0.04] border border-green-500/15 hover:border-green-400/60 hover:text-[#4ADE80] transition"
                   >
                     {q}
                   </motion.button>
@@ -718,7 +692,7 @@ export default function AIPanel({
                   rows={1}
                   placeholder="اسأل زينيث... (أضف، احذف، حلل)"
                   disabled={isLoading || isAnalyzing}
-                  className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground resize-none leading-relaxed py-1 px-1 max-h-32"
+                  className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-[#647067] resize-none leading-relaxed py-1 px-1 max-h-32"
                   style={{ scrollbarWidth: "none" }}
                 />
                 <motion.button
@@ -736,10 +710,10 @@ export default function AIPanel({
                       : "none",
                   }}
                 >
-                  <Send size={15} className={input.trim() && !isLoading ? "text-foreground" : "text-muted-foreground"} />
+                  <Send size={15} className={input.trim() && !isLoading ? "text-white" : "text-[#647067]"} />
                 </motion.button>
               </div>
-              <div className="text-[10px] text-muted-foreground mt-1.5 text-center">
+              <div className="text-[10px] text-[#647067] mt-1.5 text-center">
                 Ctrl+Enter للإرسال · {msgCount}/{MSG_LIMIT} رسائل اليوم
               </div>
             </motion.div>

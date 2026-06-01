@@ -16,7 +16,6 @@ import { useAuth } from "@/lib/useAuth";
 import AuthPage from "@/components/AuthPage";
 import { DirectionProvider } from "@/stores/useDirection";
 import { ThemeProvider } from "@/stores/useTheme";
-import { SettingsProvider } from "@/stores/useSettings";
 import "@/lib/i18n";
 
 function NotFoundComponent() {
@@ -132,16 +131,17 @@ function AuthGate() {
   if (!mounted || loading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center bg-background"
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#080D0A" }}
       >
         <div className="flex flex-col items-center gap-4">
           <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl animate-pulse text-foreground"
-            style={{ background: "linear-gradient(135deg, var(--primary), var(--accent))" }}
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl animate-pulse"
+            style={{ background: "linear-gradient(135deg, #15803D, #4ADE80)" }}
           >
             ∞
           </div>
-          <p className="text-muted-foreground text-sm">جاري التحميل...</p>
+          <p className="text-[#647067] text-sm">جاري التحميل...</p>
         </div>
       </div>
     );
@@ -165,11 +165,9 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <DirectionProvider>
-          <SettingsProvider>
-            <AuthProvider>
-              <AuthGate />
-            </AuthProvider>
-          </SettingsProvider>
+          <AuthProvider>
+            <AuthGate />
+          </AuthProvider>
         </DirectionProvider>
       </ThemeProvider>
     </QueryClientProvider>

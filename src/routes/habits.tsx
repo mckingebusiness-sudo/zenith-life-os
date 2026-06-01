@@ -4,21 +4,16 @@ import { HabitMonthlyGrid } from "@/components/habits/HabitMonthlyGrid";
 import { HabitModal } from "@/components/habits/HabitModal";
 import { HabitsAnalytics } from "@/components/habits/HabitsAnalytics";
 import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
-import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
 import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
 import { AITicker } from "@/components/habits/AITicker";
-
-import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw, Timer } from "lucide-react";
+import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw } from "lucide-react";
 import { useState, useEffect, useRef, Component } from "react";
 import { supabase } from "@/lib/supabase";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { calculateTodayProgress } from "@/lib/habitCalculations";
 import confetti from "canvas-confetti";
 import { useTranslation } from "react-i18next";
-import { useSettings } from "@/stores/useSettings";
-import { playPopSound, playEpicSound, playSwooshSound, playCrackSound } from "@/lib/audio";
 
 export const Route = createFileRoute("/habits")({
   component: HabitsPage,
@@ -26,10 +21,10 @@ export const Route = createFileRoute("/habits")({
 
 // ─── Phase 7.5: Error Boundary ───────────────────────────────────────────────
 class HabitsErrorBoundary extends Component<
-  { children: React.ReactNode; onRetry: () => void },
+  { children: React.ReactNode },
   { hasError: boolean }
 > {
-  constructor(props: { children: React.ReactNode; onRetry: () => void }) {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -41,14 +36,11 @@ class HabitsErrorBoundary extends Component<
       return (
         <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
           <div className="text-4xl">⚠️</div>
-          <h2 className="text-xl font-bold text-foreground">حدث خطأ غير متوقع</h2>
-          <p className="text-muted-foreground text-sm">لم يتم تحميل قسم العادات بشكل صحيح.</p>
+          <h2 className="text-xl font-bold text-white">حدث خطأ غير متوقع</h2>
+          <p className="text-[#A7B3AB] text-sm">لم يتم تحميل قسم العادات بشكل صحيح.</p>
           <button
-            onClick={() => {
-              this.props.onRetry();
-              this.setState({ hasError: false });
-            }}
-            className="flex items-center gap-2 px-6 py-2.5 bg-foreground/10 hover:bg-white/15 rounded-xl transition text-foreground/70 text-sm"
+            onClick={() => this.setState({ hasError: false })}
+            className="flex items-center gap-2 px-6 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition text-white/70 text-sm"
           >
             <RefreshCcw size={16} /> إعادة تحميل القسم
           </button>
@@ -62,14 +54,11 @@ class HabitsErrorBoundary extends Component<
 function HabitsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { enableGamification } = useSettings();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse, isAddingHabit, isUpdatingHabit } = useHabits(currentDate);
+  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak } = useHabits(currentDate);
   const [burst, setBurst] = useState<string | null>(null);
   const [isBlueprintsOpen, setIsBlueprintsOpen] = useState(false);
   const confettiFiredRef = useRef<string | null>(null);
-  const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeHabitQueryKey = ["habits", currentDate.getFullYear(), currentDate.getMonth() + 1];
 
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
@@ -77,58 +66,41 @@ function HabitsPage() {
     return () => clearInterval(timer);
   }, []);
 
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitWithStreak | null>(null);
 
   const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
 
-  const { handledCount: totalSuccess, totalHabits: totalItems } = calculateTodayProgress(habits);
-  const pct = totalItems > 0 ? Math.round((totalSuccess / totalItems) * 100) : 0;
-  
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-  const msLeft = endOfDay.getTime() - currentTime.getTime();
-  const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
-  const minsLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
-  const isNearEnd = hoursLeft < 4 && pct < 100 && isCurrentMonth;
-
   // Phase 7.4 — Fire confetti on 100% daily completion (once per day)
   useEffect(() => {
+    const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() &&
+      currentDate.getFullYear() === new Date().getFullYear();
     if (!isCurrentMonth || habits.length === 0) return;
+    const totalItems = habits.length;
+    const totalSuccess = habits.filter(h => h.checkedToday).length;
+    const pct = totalItems > 0 ? Math.round((totalSuccess / totalItems) * 100) : 0;
     const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
     const key = `confetti_fired_${todayStr}`;
-    
     if (pct === 100 && confettiFiredRef.current !== todayStr && !localStorage.getItem(key)) {
       confettiFiredRef.current = todayStr;
       localStorage.setItem(key, "1");
-      
-      if (enableGamification) {
-        playEpicSound();
-        confetti({
-          particleCount: 160,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ["#4ADE80", "#22D3EE", "#F59E0B", "#EC4899"],
-        });
-      }
+      confetti({
+        particleCount: 160,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ["#4ADE80", "#22D3EE", "#F59E0B", "#EC4899"],
+      });
     }
-  }, [habits, currentDate, pct, enableGamification, isCurrentMonth]);
+  }, [habits, currentDate]);
 
   const handleCheckIn = (id: string, dayLocal?: string, action?: "check" | "uncheck") => {
     checkIn(id, dayLocal, action);
     if (action === "check" || !action) {
-      if (enableGamification) playPopSound();
       setBurst(`${id}-${dayLocal || new Intl.DateTimeFormat("en-CA").format(new Date())}`);
-      if (burstTimerRef.current) clearTimeout(burstTimerRef.current);
-      burstTimerRef.current = setTimeout(() => setBurst(null), 500);
+      setTimeout(() => setBurst(null), 500);
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (burstTimerRef.current) clearTimeout(burstTimerRef.current);
-    };
-  }, []);
 
   // Awaits the actual DB save so the modal loading state is accurate
   const handleSaveHabit = async (habitData: Partial<Habit>): Promise<void> => {
@@ -174,16 +146,11 @@ function HabitsPage() {
         user_id: userId,
         active_weekdays: [0, 1, 2, 3, 4, 5, 6],
         grace_days: 0,
-        is_private: false,
-        is_deleted: false,
-        habit_type: "good",
-        is_paused: false,
-        tracking_type: "checkbox",
+        is_private: false
       }));
 
-      const { error } = await supabase.from("habits").insert(habitsToInsert);
-      if (error) throw error;
-      qc.invalidateQueries({ queryKey: activeHabitQueryKey });
+      await supabase.from("habits").insert(habitsToInsert);
+      qc.invalidateQueries({ queryKey: ["habits"] });
     } catch (err) {
       console.error(err);
       toast.error("حدث خطأ في إضافة العادات");
@@ -206,7 +173,7 @@ function HabitsPage() {
         >
           <Loader2 size={36} className="text-green-400" />
         </motion.div>
-        <p className="text-muted-foreground text-sm">جاري تحميل العادات...</p>
+        <p className="text-[#A7B3AB] text-sm">جاري تحميل العادات...</p>
       </div>
     );
   }
@@ -215,13 +182,13 @@ function HabitsPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-red-500 gap-4">
         <div className="text-xl font-bold">⚠️ حدث خطأ أثناء تحميل العادات</div>
-        <p className="text-sm text-foreground/50 max-w-md text-center">تأكد من اتصال الإنترنت وأعد المحاولة</p>
+        <p className="text-sm text-white/50 max-w-md text-center">تأكد من اتصال الإنترنت وأعد المحاولة</p>
         <pre className="text-xs bg-black/40 p-4 rounded-xl text-left dir-ltr max-w-lg overflow-auto">
           {error.message}
         </pre>
         <button
-          onClick={() => qc.invalidateQueries({ queryKey: activeHabitQueryKey })}
-          className="px-6 py-2.5 bg-foreground/10 hover:bg-white/15 rounded-xl transition text-foreground/70 text-sm"
+          onClick={() => qc.invalidateQueries({ queryKey: ["habits"] })}
+          className="px-6 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition text-white/70 text-sm"
         >
           إعادة المحاولة
         </button>
@@ -230,36 +197,24 @@ function HabitsPage() {
   }
 
   return (
-    <HabitsErrorBoundary onRetry={() => qc.invalidateQueries({ queryKey: activeHabitQueryKey })}>
-      <div className="space-y-8 max-w-[1600px] mx-auto px-4 lg:px-8 pb-16 relative">
-        {enableGamification && isCurrentMonth && pct >= 80 && (
-          <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent -z-10 transition-opacity duration-1000" />
-        )}
-        {enableGamification && isCurrentMonth && pct < 30 && (
-          <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent -z-10 transition-opacity duration-1000" />
-        )}
+    <HabitsErrorBoundary>
+      <div className="space-y-8 max-w-[1600px] mx-auto px-4 lg:px-8 pb-16">
         {/* ─── Top Header ─── */}
         <div className="print:hidden">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 glass p-5 rounded-2xl border relative overflow-hidden transition-colors ${
-              enableGamification && isCurrentMonth && pct >= 80 ? 'border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]' :
-              enableGamification && isCurrentMonth && pct < 30 ? 'border-blue-900/30' : 'border-border'
-            }`}
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 glass p-5 rounded-2xl border border-border relative overflow-hidden"
           >
           <div className="absolute inset-0 bg-primary/5 via-transparent to-transparent opacity-50" />
           <div className="relative flex items-center gap-4">
-            <div className={`p-3.5 rounded-2xl border transition-colors ${
-              enableGamification && isCurrentMonth && pct >= 80 ? 'bg-amber-500/20 border-amber-500/30 text-amber-500' :
-              enableGamification && isCurrentMonth && pct < 30 ? 'bg-blue-900/30 border-blue-900/50 text-blue-400' : 'bg-primary/10 border-primary/10 text-primary'
-            }`}>
-              <Calendar size={24} />
+            <div className="bg-primary/10 p-3.5 rounded-2xl border border-primary/10">
+              <Calendar className="text-primary" size={24} />
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
                 {t('habits.title')}
-                <Sparkles size={16} className={enableGamification && isCurrentMonth && pct >= 80 ? 'text-amber-500' : 'text-primary/60'} />
+                <Sparkles size={16} className="text-primary/60" />
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {currentTime.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -290,6 +245,63 @@ function HabitsPage() {
               </button>
             </div>
 
+            {/* Blueprints Button */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsBlueprintsOpen(true)}
+              className="flex items-center gap-2 bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground px-4 py-2.5 rounded-xl transition border border-border"
+            >
+              <LayoutGrid size={16} />
+              <span className="hidden sm:inline">{t('habits.templates')}</span>
+            </motion.button>
+
+            {/* Save as Template Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (!habits.length) {
+                  toast.error("لا يوجد عادات لحفظها!");
+                  return;
+                }
+                // Use a mutable object so the onChange handler captures the latest value
+                const nameRef = { current: 'قالب مخصص' };
+                toast.custom((toastId) => (
+                  <div className="bg-card border border-border p-4 rounded-xl shadow-xl max-w-sm w-[300px]">
+                    <h3 className="text-foreground font-bold mb-2">اسم القالب</h3>
+                    <input
+                      type="text"
+                      defaultValue={nameRef.current}
+                      onChange={(e) => { nameRef.current = e.target.value; }}
+                      className="w-full bg-background border border-border rounded-lg p-2 text-foreground text-sm mb-4 outline-none focus:border-primary/50 transition-colors"
+                      autoFocus
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => toast.dismiss(toastId)} className="px-3 py-1.5 text-sm rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground transition-colors">إلغاء</button>
+                      <button onClick={() => {
+                        const name = nameRef.current.trim();
+                        if (!name) return;
+                        const templates = JSON.parse(localStorage.getItem('zenith_custom_templates') || '[]');
+                        const newTemplate = {
+                          id: Date.now().toString(),
+                          name,
+                          habits: habits.map(h => ({ title: h.title, icon: h.icon, color: h.color, type: (h as any).habit_type || 'good' }))
+                        };
+                        localStorage.setItem('zenith_custom_templates', JSON.stringify([...templates, newTemplate]));
+                        toast.success(`تم حفظ «${name}» كقالب بنجاح!`);
+                        toast.dismiss(toastId);
+                      }} className="px-3 py-1.5 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">حفظ</button>
+                    </div>
+                  </div>
+                ), { duration: Infinity });
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-foreground/5 hover:bg-foreground/10 text-muted-foreground rounded-xl border border-border transition-all"
+            >
+              <Bookmark size={18} />
+              <span className="hidden sm:inline">{t('habits.saveAsTemplate')}</span>
+            </motion.button>
+
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -302,8 +314,6 @@ function HabitsPage() {
           </div>
         </motion.div>
         </div>
-        
-
 
         {habits.length === 0 ? (
           <div className="print:hidden">
@@ -352,17 +362,11 @@ function HabitsPage() {
                 onFreeze={freezeHabit}
                 burstId={burst}
                 onResetStreak={resetStreak}
-                isNearEnd={isNearEnd}
-                hoursLeft={hoursLeft}
-                minsLeft={minsLeft}
             />
             </div>
             <HabitsAnalytics habits={habits} currentDate={currentDate} />
             <div className="print:hidden">
               <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} />
-            </div>
-            <div className="print:hidden">
-              <BadHabitsTracker habits={habits} onResetStreak={resetStreak} onUndoRelapse={undoRelapse} />
             </div>
             <div className="print:hidden">
               <AITicker habits={habits} />
@@ -375,7 +379,6 @@ function HabitsPage() {
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveHabit}
           habit={editingHabit}
-          isSaving={isAddingHabit || isUpdatingHabit}
         />
         <HabitBlueprintsModal
           isOpen={isBlueprintsOpen}

@@ -38,7 +38,7 @@ export function AITicker({ habits }: { habits: any[] }) {
   }, [habits]);
 
   return (
-    <div className="relative overflow-hidden glass border-t border-border py-3 px-4 mt-8 flex items-center justify-center rounded-2xl mx-auto max-w-4xl shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+    <div className="relative overflow-hidden glass border-t border-white/5 py-3 px-4 mt-8 flex items-center justify-center rounded-2xl mx-auto max-w-4xl shadow-[0_0_15px_rgba(59,130,246,0.1)]">
       <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-blue-500/5 animate-pulse" />
       <div className="relative flex items-center gap-3 w-full overflow-hidden">
         <Sparkles size={16} className="text-blue-400 shrink-0" />
@@ -49,7 +49,7 @@ export function AITicker({ habits }: { habits: any[] }) {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
             transition={{ duration: 0.5 }}
-            className="text-sm font-medium text-foreground/90 truncate flex-1 text-center"
+            className="text-sm font-medium text-white/90 truncate flex-1 text-center"
           >
             {insight}
           </motion.div>

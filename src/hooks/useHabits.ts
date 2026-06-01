@@ -51,12 +51,8 @@ export interface HabitWithStreak extends Habit {
   streak: HabitStreak | null;
   checkins?: Set<string>;
   freezes?: Set<string>;
-  relapses?: Set<string>;
-  relapseLogs?: { date: string; reason: string }[];
   checkedToday?: boolean;
   frozenToday?: boolean;
-  relapsedToday?: boolean;
-  avoidedToday?: boolean;
 }
 
 const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -83,12 +79,11 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   const startStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(startDate);
   const endStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(endDate);
 
-  const { data: recentCheckins, error: checkinsError } = await supabase
+  const { data: recentCheckins } = await supabase
     .from("habit_checkins")
     .select("habit_id, day_local")
     .gte("day_local", startStr)
     .lte("day_local", endStr);
-  if (checkinsError) throw checkinsError;
 
   const checkinsByHabit = new Map<string, Set<string>>();
   recentCheckins?.forEach((c) => {
@@ -97,12 +92,11 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   });
 
   // Fetch freezes — column is 'freeze_day' in DB (not 'day_local')
-  const { data: recentFreezes, error: freezesError } = await supabase
+  const { data: recentFreezes } = await supabase
     .from("habit_freezes")
     .select("habit_id, freeze_day")
     .gte("freeze_day", startStr)
     .lte("freeze_day", endStr);
-  if (freezesError) throw freezesError;
 
   const freezesByHabit = new Map<string, Set<string>>();
   recentFreezes?.forEach((f) => {
@@ -112,74 +106,17 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
     freezesByHabit.get(f.habit_id)!.add(dayStr);
   });
 
-  const { data: recentRelapses, error: relapsesError } = await supabase
-    .from("habit_relapses")
-    .select("habit_id, day_local, reason")
-    .gte("day_local", startStr)
-    .lte("day_local", endStr);
-  if (relapsesError) throw relapsesError;
-
-  const relapsesByHabit = new Map<string, Set<string>>();
-  const relapseLogsByHabit = new Map<string, { date: string; reason: string }[]>();
-  recentRelapses?.forEach((r) => {
-    if (!relapsesByHabit.has(r.habit_id)) relapsesByHabit.set(r.habit_id, new Set());
-    if (!relapseLogsByHabit.has(r.habit_id)) relapseLogsByHabit.set(r.habit_id, []);
-    relapsesByHabit.get(r.habit_id)!.add(r.day_local);
-    relapseLogsByHabit.get(r.habit_id)!.push({ date: r.day_local, reason: r.reason || "" });
-  });
-
   return (habits || []).map((h: any) => {
     const habitCheckins = checkinsByHabit.get(h.id) || new Set<string>();
     const habitFreezes = freezesByHabit.get(h.id) || new Set<string>();
-    const habitRelapses = relapsesByHabit.get(h.id) || new Set<string>();
-    const habitRelapseLogs = relapseLogsByHabit.get(h.id) || [];
-    const habitType = h.habit_type || 'good';
-    const relapsedToday = habitRelapses.has(today);
-
-    // For quit/avoidance habits, calculate streak client-side from last relapse
-    // DB triggers only process habit_checkins, which quit habits don't use
-    let dbStreak = (Array.isArray(h.streak) ? h.streak[0] : h.streak) || { current_streak: 0, longest_streak: 0, total_checkins: 0 };
-    
-    if (habitType === 'quit') {
-      // Find the most recent relapse date
-      const relapseDates = Array.from(habitRelapses as Set<string>).sort();
-      let avoidedStreak = 0;
-      
-      if (relapseDates.length === 0) {
-        // No relapses ever — count from habit creation date or start of data window
-        const createdAt = h.created_at ? new Date(h.created_at) : startDate;
-        const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
-        const todayDate = new Date(today);
-        const createdDate = new Date(createdDay);
-        avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)));
-      } else {
-        // Count days since last relapse
-        const lastRelapse = relapseDates[relapseDates.length - 1];
-        const lastRelapseDate = new Date(lastRelapse);
-        const todayDate = new Date(today);
-        avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - lastRelapseDate.getTime()) / (1000 * 60 * 60 * 24)));
-      }
-      
-      dbStreak = {
-        ...dbStreak,
-        current_streak: avoidedStreak,
-        longest_streak: Math.max(dbStreak.longest_streak || 0, avoidedStreak),
-        total_checkins: relapseDates.length, // total relapses for reference
-      };
-    }
-
     return {
       ...h,
-      habit_type: habitType,
-      streak: dbStreak,
+      habit_type: h.habit_type || 'good',
+      streak: h.streak?.[0] || { current_streak: 0, longest_streak: 0, total_checkins: 0 },
       checkins: habitCheckins,
       freezes: habitFreezes,
-      relapses: habitRelapses,
-      relapseLogs: habitRelapseLogs,
-      checkedToday: habitType === 'quit' ? false : habitCheckins.has(today), // For quit habits, use avoidedToday instead
+      checkedToday: habitCheckins.has(today),
       frozenToday: habitFreezes.has(today),
-      relapsedToday,
-      avoidedToday: habitType === 'quit' ? !relapsedToday : undefined,
     };
   });
 }
@@ -337,13 +274,8 @@ export function useHabits(currentDate: Date = new Date()) {
         user_id: userId,
         is_deleted: false,
         habit_type: (habit as any).habit_type || 'good',
-        saved_value_per_day: (habit as any).saved_value_per_day ?? null,
-        saved_unit: (habit as any).saved_unit ?? null,
-        is_paused: habit.is_paused ?? false,
-        pause_until: habit.pause_until ?? null,
-        tracking_type: habit.tracking_type ?? "checkbox",
-        target_value: habit.target_value ?? null,
-        target_unit: habit.target_unit ?? null,
+        saved_value_per_day: (habit as any).saved_value_per_day,
+        saved_unit: (habit as any).saved_unit
       };
 
       const { data, error } = await supabase
@@ -374,21 +306,10 @@ export function useHabits(currentDate: Date = new Date()) {
         sort_order: newHabit.sort_order || 0,
         user_id: "optimistic",
         habit_type: (newHabit as any).habit_type || 'good',
-        saved_value_per_day: (newHabit as any).saved_value_per_day ?? undefined,
-        saved_unit: (newHabit as any).saved_unit ?? undefined,
-        is_paused: newHabit.is_paused ?? false,
-        pause_until: newHabit.pause_until ?? null,
-        tracking_type: newHabit.tracking_type ?? "checkbox",
-        target_value: newHabit.target_value ?? null,
-        target_unit: newHabit.target_unit ?? null,
         checkins: new Set(),
-        relapses: new Set(),
-        relapseLogs: [],
-        checkedToday: false, // quit habits use avoidedToday, good habits need explicit checkin
+        checkedToday: false,
         freezes: new Set(),
         frozenToday: false,
-        relapsedToday: false,
-        avoidedToday: (newHabit as any).habit_type === "quit",
         streak: {
           habit_id: optimisticId,
           user_id: "optimistic",
@@ -409,30 +330,19 @@ export function useHabits(currentDate: Date = new Date()) {
     onSuccess: (data, _newHabit, context) => {
       // Replace the optimistic entry with the real DB row if we got one
       if (data?.id && context?.optimisticId) {
-        const realHabit: HabitWithStreak = {
-          ...(data as Habit),
-          habit_type: (data as any).habit_type || "good",
-          checkins: new Set(),
-          freezes: new Set(),
-          relapses: new Set(),
-          relapseLogs: [],
-          checkedToday: false,
-          frozenToday: false,
-          relapsedToday: false,
-          avoidedToday: (data as any).habit_type === "quit",
-          streak: {
-            habit_id: data.id,
-            user_id: data.user_id,
-            current_streak: 0,
-            longest_streak: 0,
-            last_checkin_day: null,
-            total_checkins: 0,
-            computed_at: new Date().toISOString(),
-          },
-        };
         qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
           if (!old) return old;
-          return old.map((h) => (h.id === context.optimisticId ? realHabit : h));
+          return old.map((h) => {
+            if (h.id === context.optimisticId) {
+              return {
+                ...h,
+                id: data.id,
+                user_id: data.user_id || h.user_id,
+                sort_order: data.sort_order ?? h.sort_order,
+              };
+            }
+            return h;
+          });
         });
       }
     },
@@ -443,9 +353,9 @@ export function useHabits(currentDate: Date = new Date()) {
       }
       toast.error("فشل حفظ العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
-    // ✅ Invalidate ALL habits queries so AI changes from AppShell propagate to HabitsPage
+    // ✅ FIXED: Only invalidate the current month query, not ALL months
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -474,24 +384,13 @@ export function useHabits(currentDate: Date = new Date()) {
 
       return { previous };
     },
-    onSuccess: (data, variables) => {
-      qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
-        if (!old) return old;
-        return old.map((h) => {
-          if (h.id === variables.id) {
-            return { ...h, ...(data as any) };
-          }
-          return h;
-        });
-      });
-    },
     onError: (err: any, _vars, ctx) => {
       console.error("❌ updateHabit FAILED:", err);
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
       toast.error("فشل تعديل العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -589,50 +488,17 @@ export function useHabits(currentDate: Date = new Date()) {
     if (!authData.session) throw new Error("Not logged in");
     const userId = authData.session.user.id;
 
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
-    const { error } = await supabase.from("habit_relapses").upsert({
+    // Reset current streak in DB
+    await supabase
+      .from("habit_streaks")
+      .update({ current_streak: 0 })
+      .eq("habit_id", habitId);
+    
+    // Log relapse reason
+    await supabase.from("habit_relapses").insert({
       habit_id: habitId,
       user_id: userId,
-      day_local: today,
       reason: reason
-    }, { onConflict: "habit_id,day_local" });
-    if (error) throw error;
-
-    qc.invalidateQueries({ queryKey });
-  };
-
-  // ─── Undo Today's Relapse ────────────────────────────────────────────────────
-  const undoRelapse = async (habitId: string) => {
-    const { data: authData } = await supabase.auth.getSession();
-    if (!authData.session) throw new Error("Not logged in");
-    const userId = authData.session.user.id;
-
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
-    const { error } = await supabase
-      .from("habit_relapses")
-      .delete()
-      .match({ habit_id: habitId, user_id: userId, day_local: today });
-
-    if (error) throw error;
-
-    // Optimistically update the cache immediately
-    qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
-      if (!old) return old;
-      return old.map((h) => {
-        if (h.id === habitId) {
-          const newRelapses = new Set(h.relapses);
-          newRelapses.delete(today);
-          const newRelapseLogs = (h.relapseLogs || []).filter(l => l.date !== today);
-          return {
-            ...h,
-            relapses: newRelapses,
-            relapseLogs: newRelapseLogs,
-            relapsedToday: false,
-            avoidedToday: true,
-          };
-        }
-        return h;
-      });
     });
 
     qc.invalidateQueries({ queryKey });
@@ -654,7 +520,6 @@ export function useHabits(currentDate: Date = new Date()) {
     undeleteHabit: (id: string) => undeleteHabit.mutateAsync(id),
     freezeHabit: (id: string, dateStr: string, monthStr: string) => freezeHabit.mutateAsync({ id, dateStr, monthStr }),
     resetStreak,
-    undoRelapse,
     isAddingHabit: addHabit.isPending,
     isUpdatingHabit: updateHabit.isPending,
   };

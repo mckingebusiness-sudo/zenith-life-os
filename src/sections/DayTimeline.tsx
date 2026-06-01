@@ -63,7 +63,7 @@ export default function DayTimeline() {
                   }}
                 >
                   {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                  {isDone && <span className="text-[10px] text-foreground">✓</span>}
+                  {isDone && <span className="text-[10px] text-white">✓</span>}
                 </motion.div>
                 <div className="text-center" style={{ opacity: isDone && !isSel ? 0.5 : 1 }}>
                   <div className="text-[11px] tabular text-muted-foreground">{e.time}</div>

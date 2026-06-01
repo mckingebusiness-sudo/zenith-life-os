@@ -105,7 +105,7 @@ export default function HeroStatement() {
           className="flex flex-wrap items-center gap-3 pt-2"
         >
           <button
-            className="px-7 py-3.5 rounded-2xl font-semibold text-[14px] flex items-center gap-2 transition hover:scale-[1.02] text-foreground"
+            className="px-7 py-3.5 rounded-2xl font-semibold text-[14px] flex items-center gap-2 transition hover:scale-[1.02] text-white"
             style={{
               background: "linear-gradient(135deg, #15803D 0%, #22C55E 100%)",
               boxShadow: "0 0 32px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.2)",
