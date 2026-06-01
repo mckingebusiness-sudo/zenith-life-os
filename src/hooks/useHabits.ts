@@ -135,15 +135,48 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
     const habitRelapseLogs = relapseLogsByHabit.get(h.id) || [];
     const habitType = h.habit_type || 'good';
     const relapsedToday = habitRelapses.has(today);
+
+    // For quit/avoidance habits, calculate streak client-side from last relapse
+    // DB triggers only process habit_checkins, which quit habits don't use
+    let dbStreak = (Array.isArray(h.streak) ? h.streak[0] : h.streak) || { current_streak: 0, longest_streak: 0, total_checkins: 0 };
+    
+    if (habitType === 'quit') {
+      // Find the most recent relapse date
+      const relapseDates = Array.from(habitRelapses as Set<string>).sort();
+      let avoidedStreak = 0;
+      
+      if (relapseDates.length === 0) {
+        // No relapses ever — count from habit creation date or start of data window
+        const createdAt = h.created_at ? new Date(h.created_at) : startDate;
+        const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
+        const todayDate = new Date(today);
+        const createdDate = new Date(createdDay);
+        avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)));
+      } else {
+        // Count days since last relapse
+        const lastRelapse = relapseDates[relapseDates.length - 1];
+        const lastRelapseDate = new Date(lastRelapse);
+        const todayDate = new Date(today);
+        avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - lastRelapseDate.getTime()) / (1000 * 60 * 60 * 24)));
+      }
+      
+      dbStreak = {
+        ...dbStreak,
+        current_streak: avoidedStreak,
+        longest_streak: Math.max(dbStreak.longest_streak || 0, avoidedStreak),
+        total_checkins: relapseDates.length, // total relapses for reference
+      };
+    }
+
     return {
       ...h,
       habit_type: habitType,
-      streak: (Array.isArray(h.streak) ? h.streak[0] : h.streak) || { current_streak: 0, longest_streak: 0, total_checkins: 0 },
+      streak: dbStreak,
       checkins: habitCheckins,
       freezes: habitFreezes,
       relapses: habitRelapses,
       relapseLogs: habitRelapseLogs,
-      checkedToday: habitType === 'quit' ? !relapsedToday : habitCheckins.has(today), // Kept for legacy compatibility, use isHabitHandledToday instead
+      checkedToday: habitType === 'quit' ? false : habitCheckins.has(today), // For quit habits, use avoidedToday instead
       frozenToday: habitFreezes.has(today),
       relapsedToday,
       avoidedToday: habitType === 'quit' ? !relapsedToday : undefined,
@@ -351,7 +384,7 @@ export function useHabits(currentDate: Date = new Date()) {
         checkins: new Set(),
         relapses: new Set(),
         relapseLogs: [],
-        checkedToday: (newHabit as any).habit_type === "quit",
+        checkedToday: false, // quit habits use avoidedToday, good habits need explicit checkin
         freezes: new Set(),
         frozenToday: false,
         relapsedToday: false,
@@ -383,7 +416,7 @@ export function useHabits(currentDate: Date = new Date()) {
           freezes: new Set(),
           relapses: new Set(),
           relapseLogs: [],
-          checkedToday: (data as any).habit_type === "quit",
+          checkedToday: false,
           frozenToday: false,
           relapsedToday: false,
           avoidedToday: (data as any).habit_type === "quit",
@@ -410,9 +443,9 @@ export function useHabits(currentDate: Date = new Date()) {
       }
       toast.error("فشل حفظ العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
-    // ✅ FIXED: Only invalidate the current month query, not ALL months
+    // ✅ Invalidate ALL habits queries so AI changes from AppShell propagate to HabitsPage
     onSettled: () => {
-      qc.invalidateQueries({ queryKey });
+      qc.invalidateQueries({ queryKey: KEY });
     },
     retry: 0,
   });
@@ -458,7 +491,7 @@ export function useHabits(currentDate: Date = new Date()) {
       toast.error("فشل تعديل العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey });
+      qc.invalidateQueries({ queryKey: KEY });
     },
     retry: 0,
   });
@@ -568,6 +601,43 @@ export function useHabits(currentDate: Date = new Date()) {
     qc.invalidateQueries({ queryKey });
   };
 
+  // ─── Undo Today's Relapse ────────────────────────────────────────────────────
+  const undoRelapse = async (habitId: string) => {
+    const { data: authData } = await supabase.auth.getSession();
+    if (!authData.session) throw new Error("Not logged in");
+    const userId = authData.session.user.id;
+
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
+    const { error } = await supabase
+      .from("habit_relapses")
+      .delete()
+      .match({ habit_id: habitId, user_id: userId, day_local: today });
+
+    if (error) throw error;
+
+    // Optimistically update the cache immediately
+    qc.setQueryData<HabitWithStreak[]>(queryKey, (old) => {
+      if (!old) return old;
+      return old.map((h) => {
+        if (h.id === habitId) {
+          const newRelapses = new Set(h.relapses);
+          newRelapses.delete(today);
+          const newRelapseLogs = (h.relapseLogs || []).filter(l => l.date !== today);
+          return {
+            ...h,
+            relapses: newRelapses,
+            relapseLogs: newRelapseLogs,
+            relapsedToday: false,
+            avoidedToday: true,
+          };
+        }
+        return h;
+      });
+    });
+
+    qc.invalidateQueries({ queryKey });
+  };
+
   return {
     habits: query.data || [],
     isLoading: query.isLoading,
@@ -584,6 +654,7 @@ export function useHabits(currentDate: Date = new Date()) {
     undeleteHabit: (id: string) => undeleteHabit.mutateAsync(id),
     freezeHabit: (id: string, dateStr: string, monthStr: string) => freezeHabit.mutateAsync({ id, dateStr, monthStr }),
     resetStreak,
+    undoRelapse,
     isAddingHabit: addHabit.isPending,
     isUpdatingHabit: updateHabit.isPending,
   };

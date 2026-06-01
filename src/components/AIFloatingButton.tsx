@@ -108,7 +108,8 @@ function buildHabitsContext(habits: ReturnType<typeof useHabits>["habits"]) {
       streak: h.streak?.current_streak || 0,
       longestStreak: h.streak?.longest_streak || 0,
       totalCheckins: h.streak?.total_checkins || 0,
-      checkedToday: h.checkedToday,
+      avoidedToday: !!(h as any).avoidedToday,
+      checkedToday: h.habit_type === 'quit' ? !h.relapsedToday : !!h.checkedToday,
       thisMonthCheckins: monthCheckins,
       completionRateThisMonth: `${completionRate}%`,
       savedValue: (h as any).saved_value_per_day ? `${(h as any).saved_value_per_day} ${(h as any).saved_unit || ""}` : null,
@@ -134,8 +135,8 @@ function parseAIActions(text: string): { cleanText: string; actions: ParsedActio
   const actions: ParsedAction[] = [];
   let cleanText = text;
 
-  // Pattern to match [ACTION_TYPE] {json}
-  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{.*?\})/gi;
+  // Improved pattern: supports nested JSON objects like {"updates":{"title":"x"}}
+  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{(?:[^{}]|\{[^{}]*\})*\})/gi;
   let match;
 
   while ((match = actionRegex.exec(text)) !== null) {
@@ -189,7 +190,7 @@ const SYSTEM_PROMPT = `أنت زينيث AI — المساعد الذكي لتط
 - ممنوع منعاً باتاً عرض أي كود أو JSON للمستخدم. يجب أن يكون الرد نصياً طبيعياً فقط.
 - أسلوبك: مهني، مشجع، مختصر، مثل مدرب شخصي محترف.
 
-للقيام بإجراءات (إضافة/حذف عادة)، لا تخبر المستخدم أنك تنفذ كود، بل رُد بشكل طبيعي (مثلاً: "تمت إضافة العادة بنجاح!") ثم ضع السطر السحري التالي في **نهاية ردك تماماً وفي سطر جديد**:
+للقيام بإجراءات (إضافة/حذف/تعديل عادة)، لا تخبر المستخدم أنك تنفذ كود، بل رُد بشكل طبيعي (مثلاً: "تمت إضافة العادة بنجاح!") ثم ضع السطر السحري التالي في **نهاية ردك تماماً وفي سطر جديد**:
 
 لإضافة عادة إيجابية:
 [ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
@@ -200,10 +201,11 @@ const SYSTEM_PROMPT = `أنت زينيث AI — المساعد الذكي لتط
 للحذف:
 [ACTION_DELETE] {"title":"اسم العادة"}
 
-للتعديل:
-[ACTION_UPDATE] {"id":"habit-id","updates":{"title":"العنوان الجديد"}}
+للتعديل (استخدم الـ title الدقيق للعادة من قائمة العادات، ولا تستخدم الـ id):
+[ACTION_UPDATE] {"title":"اسم العادة الحالي","updates":{"title":"العنوان الجديد","icon":"🎯"}}
 
-- احسب نسبة الإنجاز الإجمالية بناءً على (الأيام المنقضية من الشهر) وليس الشهر كاملاً.`;
+- احسب نسبة الإنجاز الإجمالية بناءً على (الأيام المنقضية من الشهر) وليس الشهر كاملاً.
+- عند التعديل، حدد العادة دائماً بـ "title" الدقيق كما يظهر في قائمة العادات التي تراها.`;
 
 const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
 
@@ -306,11 +308,25 @@ export default function AIPanel({
           }
         }
         if (action.type === "update_habit" && onUpdateHabit && action.data) {
-          const id = String(action.data.id || "");
+          // Support both id-based (old) and title-based (new) update
+          let habitId = String(action.data.id || "");
+          const titleKey = String(action.data.title || "");
+          
+          // If title is provided instead of/in addition to id, resolve id from habits list
+          if (titleKey && (!habitId || habitId === "habit-id" || habitId === "")) {
+            const found = habits.find(h => 
+              h.title.toLowerCase().trim() === titleKey.toLowerCase().trim() ||
+              h.title.toLowerCase().includes(titleKey.toLowerCase())
+            );
+            if (found) habitId = found.id;
+          }
+          
           const updates = action.data.updates as Record<string, unknown>;
-          if (id && updates) {
-            await onUpdateHabit(id, updates);
-            showToast(`✏️ تم التعديل`);
+          if (habitId && updates) {
+            await onUpdateHabit(habitId, updates);
+            showToast(`✏️ تم تعديل: ${titleKey || habitId}`);
+          } else {
+            showToast(`⚠️ لم أجد العادة للتعديل`);
           }
         }
       } catch (e) {

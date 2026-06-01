@@ -132,13 +132,12 @@ function AuthGate() {
   if (!mounted || loading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "#080D0A" }}
+        className="min-h-screen flex items-center justify-center bg-background"
       >
         <div className="flex flex-col items-center gap-4">
           <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl animate-pulse"
-            style={{ background: "linear-gradient(135deg, #15803D, #4ADE80)" }}
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl animate-pulse text-foreground"
+            style={{ background: "linear-gradient(135deg, var(--primary), var(--accent))" }}
           >
             ∞
           </div>

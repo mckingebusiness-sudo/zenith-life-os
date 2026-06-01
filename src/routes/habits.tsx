@@ -7,7 +7,7 @@ import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
 import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
 import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
 import { AITicker } from "@/components/habits/AITicker";
-import { QuotesBanner } from "@/components/habits/QuotesBanner";
+
 import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw, Timer } from "lucide-react";
 import { useState, useEffect, useRef, Component } from "react";
 import { supabase } from "@/lib/supabase";
@@ -64,7 +64,7 @@ function HabitsPage() {
   const qc = useQueryClient();
   const { enableGamification } = useSettings();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, isAddingHabit, isUpdatingHabit } = useHabits(currentDate);
+  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse, isAddingHabit, isUpdatingHabit } = useHabits(currentDate);
   const [burst, setBurst] = useState<string | null>(null);
   const [isBlueprintsOpen, setIsBlueprintsOpen] = useState(false);
   const confettiFiredRef = useRef<string | null>(null);
@@ -303,9 +303,7 @@ function HabitsPage() {
         </motion.div>
         </div>
         
-        <div className="print:hidden mt-6 mb-2">
-          <QuotesBanner />
-        </div>
+
 
         {habits.length === 0 ? (
           <div className="print:hidden">
@@ -364,7 +362,7 @@ function HabitsPage() {
               <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} />
             </div>
             <div className="print:hidden">
-              <BadHabitsTracker habits={habits} onResetStreak={resetStreak} />
+              <BadHabitsTracker habits={habits} onResetStreak={resetStreak} onUndoRelapse={undoRelapse} />
             </div>
             <div className="print:hidden">
               <AITicker habits={habits} />

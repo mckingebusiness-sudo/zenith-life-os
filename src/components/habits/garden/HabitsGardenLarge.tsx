@@ -82,7 +82,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn }: HabitsGardenLar
     }
   };
 
-  const bgClass = "bg-card";
+  const bgClass = "bg-[#0a0a0a]";
 
   const isAllDone = total > 0 && doneCount === total;
   const [showCelebration, setShowCelebration] = useState(false);

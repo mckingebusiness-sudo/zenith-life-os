@@ -12,7 +12,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false);
   const draggingSidebar = useRef(false);
   const { dir } = useDirection();
-  const { addHabitAsync, deleteHabit, updateHabitAsync, habits } = useHabits();
+  const { addHabitAsync, deleteHabit, updateHabitAsync, habits } = useHabits(new Date());
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
