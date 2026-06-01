@@ -245,62 +245,7 @@ function HabitsPage() {
               </button>
             </div>
 
-            {/* Blueprints Button */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setIsBlueprintsOpen(true)}
-              className="flex items-center gap-2 bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground px-4 py-2.5 rounded-xl transition border border-border"
-            >
-              <LayoutGrid size={16} />
-              <span className="hidden sm:inline">{t('habits.templates')}</span>
-            </motion.button>
 
-            {/* Save as Template Button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                if (!habits.length) {
-                  toast.error("لا يوجد عادات لحفظها!");
-                  return;
-                }
-                // Use a mutable object so the onChange handler captures the latest value
-                const nameRef = { current: 'قالب مخصص' };
-                toast.custom((toastId) => (
-                  <div className="bg-card border border-border p-4 rounded-xl shadow-xl max-w-sm w-[300px]">
-                    <h3 className="text-foreground font-bold mb-2">اسم القالب</h3>
-                    <input
-                      type="text"
-                      defaultValue={nameRef.current}
-                      onChange={(e) => { nameRef.current = e.target.value; }}
-                      className="w-full bg-background border border-border rounded-lg p-2 text-foreground text-sm mb-4 outline-none focus:border-primary/50 transition-colors"
-                      autoFocus
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => toast.dismiss(toastId)} className="px-3 py-1.5 text-sm rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground transition-colors">إلغاء</button>
-                      <button onClick={() => {
-                        const name = nameRef.current.trim();
-                        if (!name) return;
-                        const templates = JSON.parse(localStorage.getItem('zenith_custom_templates') || '[]');
-                        const newTemplate = {
-                          id: Date.now().toString(),
-                          name,
-                          habits: habits.map(h => ({ title: h.title, icon: h.icon, color: h.color, type: (h as any).habit_type || 'good' }))
-                        };
-                        localStorage.setItem('zenith_custom_templates', JSON.stringify([...templates, newTemplate]));
-                        toast.success(`تم حفظ «${name}» كقالب بنجاح!`);
-                        toast.dismiss(toastId);
-                      }} className="px-3 py-1.5 text-sm rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors">حفظ</button>
-                    </div>
-                  </div>
-                ), { duration: Infinity });
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-foreground/5 hover:bg-foreground/10 text-muted-foreground rounded-xl border border-border transition-all"
-            >
-              <Bookmark size={18} />
-              <span className="hidden sm:inline">{t('habits.saveAsTemplate')}</span>
-            </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.05 }}
