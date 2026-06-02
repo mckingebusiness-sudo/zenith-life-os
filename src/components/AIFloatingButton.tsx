@@ -1,49 +1,52 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Infinity as InfinityIcon, X, Send, GripVertical, Brain, BarChart3, Trash2, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { Infinity as InfinityIcon, X, Send, GripVertical, Brain, BarChart3, Trash2, RefreshCw, Sparkles, AppWindow, PanelRight } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 
 // ─── AITrigger ──────────────────────────────────────────────────────────────
-export function AITrigger({ onClick }: { onClick: () => void }) {
+export function AITrigger({ onClick, side = "right" }: { onClick: () => void; side?: "left" | "right" }) {
+  const isLeft = side === "right";
   return (
     <motion.button
-      initial={{ scale: 0, opacity: 0, rotate: -180 }}
-      animate={{ scale: 1, opacity: 1, rotate: 0 }}
-      whileHover={{ scale: 1.08 }}
-      whileTap={{ scale: 0.92 }}
+      initial={{ scale: 0, opacity: 0, y: 20 }}
+      animate={{ scale: 1, opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
       onClick={onClick}
-      className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full flex items-center justify-center group"
-      style={{
-        background: "radial-gradient(circle at 30% 30%, #1a2e22, #030504 70%)",
-        border: "1.5px solid rgba(74,222,128,0.55)",
-        boxShadow:
-          "0 0 40px rgba(34,197,94,0.45), 0 0 80px rgba(34,197,94,0.18), inset 0 0 16px rgba(74,222,128,0.15)",
-      }}
+      className={`fixed bottom-6 ${isLeft ? "left-6" : "right-6"} z-50 w-16 h-16 rounded-full flex items-center justify-center bg-black/60 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] hover:bg-black/80 hover:border-green-500/40 hover:shadow-[0_0_30px_rgba(34,197,94,0.3)] transition-all group`}
     >
-      <motion.span
-        className="absolute inset-0 rounded-full"
-        style={{ border: "1px solid rgba(74,222,128,0.4)" }}
-        animate={{ scale: [1, 1.35, 1], opacity: [0.7, 0, 0.7] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
-      />
-      <motion.span
-        animate={{ rotate: 360 }}
-        transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-        className="absolute inset-1.5 rounded-full border border-dashed border-green-500/40"
-      />
-      <motion.div
-        animate={{ y: [0, -2, 0] }}
-        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-        className="relative z-10"
+      <svg
+        width="38"
+        height="38"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-green-400 group-hover:text-green-300 transition-colors drop-shadow-[0_0_8px_rgba(74,222,128,0.5)] group-hover:drop-shadow-[0_0_12px_rgba(74,222,128,0.8)]"
       >
-        <InfinityIcon size={26} className="text-[#4ADE80] drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]" strokeWidth={2.4} />
-      </motion.div>
-      <span className="absolute bottom-full mb-2 right-0 whitespace-nowrap text-[11px] text-[#A7B3AB] opacity-0 group-hover:opacity-100 transition">
-        زينيث AI · ⌘J
-      </span>
+        <motion.g
+          animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
+          transition={{ duration: 4.5, repeat: Infinity, times: [0, 0.95, 0.96, 0.98, 1] }}
+          style={{ transformOrigin: "50% 12px" }}
+        >
+          <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z" />
+          <motion.g
+            animate={{ x: [0, 1.2, -1.2, 0.5, 0], y: [0, -0.8, 0.8, -0.5, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            fill="currentColor"
+            stroke="none"
+          >
+            <circle cx="6" cy="12" r="1.5" />
+            <circle cx="18" cy="12" r="1.5" />
+          </motion.g>
+        </motion.g>
+      </svg>
     </motion.button>
   );
 }
+
 
 // ─── StarField ──────────────────────────────────────────────────────────────
 function StarField() {
@@ -82,17 +85,89 @@ interface ParsedAction {
   data?: Record<string, unknown>;
 }
 
+// ─── Human-like response cleaner ─────────────────────────────────────────────
+/**
+ * يشيل النجوم والنقط والتنسيق الزيادة ويخلي الرد يبان طبيعي زي كلام إنسان
+ * ويضيف إيموجيات ذكية حسب السياق
+ */
+function cleanAndHumanizeResponse(text: string): string {
+  let cleaned = text;
+
+  // إزالة أي نجوم بالكامل من النص
+  cleaned = cleaned.replace(/\*/g, "");
+
+  // إزالة العناوين (###, ##, #)
+  cleaned = cleaned.replace(/^#{1,6}\s+/gm, "");
+
+  // إزالة الشرطات المضاعفة كعناوين
+  cleaned = cleaned.replace(/^[-─═]+\s*/gm, "");
+
+  // تحويل bullet points (-، •، ١٢٣...) إلى فقرات طبيعية
+  cleaned = cleaned.replace(/^[\s]*[-•]\s+/gm, "• ");
+  cleaned = cleaned.replace(/^\s*\d+[.)]\s+/gm, "");
+
+  // إزالة backticks
+  cleaned = cleaned.replace(/`{1,3}([^`]*)`{1,3}/g, "$1");
+
+  // إزالة horizontal rules
+  cleaned = cleaned.replace(/^(-{3,}|_{3,}|={3,})$/gm, "");
+
+  // إزالة أسطر فارغة زيادة (أكثر من سطرين متتاليين)
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+
+  // تنظيف مسافات زيادة في البداية والنهاية
+  cleaned = cleaned.trim();
+
+  // إضافة إيموجي ذكي حسب السياق إذا مفيش إيموجي في البداية
+  const hasEmoji = /\p{Emoji}/u.test(cleaned.slice(0, 10));
+  if (!hasEmoji) {
+    cleaned = addContextualEmoji(cleaned);
+  }
+
+  return cleaned;
+}
+
+/**
+ * يضيف إيموجي مناسب للرد حسب المحتوى
+ */
+function addContextualEmoji(text: string): string {
+  const lower = text.toLowerCase();
+
+  if (/تحليل|إحصاء|إحصائيات|نسبة|أداء/.test(text)) return "📊 " + text;
+  if (/ممتاز|رائع|أحسنت|بالتوفيق|عظيم|مبروك/.test(text)) return "🎉 " + text;
+  if (/تمت إضافة|أضفت|إضافة/.test(text)) return "✅ " + text;
+  if (/تم حذف|حذفت|حذف/.test(text)) return "🗑️ " + text;
+  if (/اقتراح|أنصحك|أقترح|جرب/.test(text)) return "💡 " + text;
+  if (/تحذير|انتبه|مهم/.test(text)) return "⚠️ " + text;
+  if (/استمر|واصل|لا تستسلم/.test(text)) return "💪 " + text;
+  if (/خطة|روتين|جدول/.test(text)) return "📋 " + text;
+  if (/صباح|صباحاً/.test(text)) return "🌅 " + text;
+  if (/مساء/.test(text)) return "🌙 " + text;
+  if (/نوم/.test(text)) return "😴 " + text;
+  if (/رياضة|جري|تمرين/.test(text)) return "🏃 " + text;
+  if (/ماء|شرب/.test(text)) return "💧 " + text;
+  if (/كتاب|قراءة/.test(text)) return "📚 " + text;
+  if (/مال|توفير|أموال/.test(text)) return "💰 " + text;
+  if (/عذراً|آسف|خطأ|مشكلة/.test(text)) return "😅 " + text;
+  if (/سؤال|استفسار/.test(lower)) return "🤔 " + text;
+
+  // إيموجي افتراضي للردود العامة
+  return "✨ " + text;
+}
+
 // ─── Build Rich Context for AI ───────────────────────────────────────────────
 function buildHabitsContext(habits: ReturnType<typeof useHabits>["habits"]) {
   const now = new Date();
   const today = now.toISOString().split("T")[0];
   const dayOfMonth = now.getDate();
   const monthName = now.toLocaleDateString("ar-EG", { month: "long", year: "numeric" });
+  const dayName = now.toLocaleDateString("ar-EG", { weekday: "long" });
+  const hour = now.getHours();
+  const timeOfDay = hour < 12 ? "الصباح" : hour < 17 ? "الظهيرة" : hour < 21 ? "المساء" : "الليل";
 
   const goodHabits = habits.filter(h => (h as any).habit_type !== "quit");
   const badHabits = habits.filter(h => (h as any).habit_type === "quit");
 
-  // Calculate this month's checkins for each habit
   const yr = now.getFullYear();
   const mo = String(now.getMonth() + 1).padStart(2, "0");
 
@@ -100,31 +175,58 @@ function buildHabitsContext(habits: ReturnType<typeof useHabits>["habits"]) {
     const monthCheckins = Array.from(h.checkins || []).filter(d => d.startsWith(`${yr}-${mo}`)).length;
     const isGood = (h as any).habit_type !== "quit";
     const completionRate = dayOfMonth > 0 ? Math.round((monthCheckins / dayOfMonth) * 100) : 0;
+    const streak = h.streak?.current_streak || 0;
+    const longestStreak = h.streak?.longest_streak || 0;
+
+    // تقييم الأداء
+    let performanceLevel = "ضعيف";
+    if (completionRate >= 90) performanceLevel = "ممتاز";
+    else if (completionRate >= 75) performanceLevel = "جيد جداً";
+    else if (completionRate >= 60) performanceLevel = "جيد";
+    else if (completionRate >= 40) performanceLevel = "مقبول";
+
     return {
       id: h.id,
       title: h.title,
-      type: isGood ? "good" : "bad/quit",
-      streak: h.streak?.current_streak || 0,
-      longestStreak: h.streak?.longest_streak || 0,
+      type: isGood ? "إيجابية" : "سلبية/للإقلاع",
+      streak,
+      longestStreak,
       totalCheckins: h.streak?.total_checkins || 0,
       checkedToday: h.checkedToday,
       thisMonthCheckins: monthCheckins,
-      completionRateThisMonth: `${completionRate}%`,
+      completionRateThisMonth: completionRate,
+      performanceLevel,
       savedValue: (h as any).saved_value_per_day ? `${(h as any).saved_value_per_day} ${(h as any).saved_unit || ""}` : null,
     };
   });
 
   const todayCompleted = habits.filter(h => h.checkedToday).length;
   const todayTotal = habits.length;
+  const todayPercentage = todayTotal > 0 ? Math.round((todayCompleted / todayTotal) * 100) : 0;
+
+  // أفضل وأضعف عادة
+  const sortedByRate = [...habitDetails].filter(h => h.type === "إيجابية").sort((a, b) => b.completionRateThisMonth - a.completionRateThisMonth);
+  const bestHabit = sortedByRate[0];
+  const worstHabit = sortedByRate[sortedByRate.length - 1];
+
+  // حساب الاتساق الإجمالي
+  const avgCompletion = habitDetails.length > 0
+    ? Math.round(habitDetails.filter(h => h.type === "إيجابية").reduce((sum, h) => sum + h.completionRateThisMonth, 0) / Math.max(goodHabits.length, 1))
+    : 0;
 
   return {
     currentDate: today,
+    dayName,
     currentMonth: monthName,
+    timeOfDay,
     daysElapsedInMonth: dayOfMonth,
     totalHabits: habits.length,
     goodHabitsCount: goodHabits.length,
     badHabitsCount: badHabits.length,
-    todayProgress: `${todayCompleted}/${todayTotal}`,
+    todayProgress: `${todayCompleted}/${todayTotal} (${todayPercentage}%)`,
+    averageMonthlyCompletion: `${avgCompletion}%`,
+    bestHabit: bestHabit ? `${bestHabit.title} (${bestHabit.completionRateThisMonth}%)` : "لا يوجد",
+    worstHabit: worstHabit && worstHabit !== bestHabit ? `${worstHabit.title} (${worstHabit.completionRateThisMonth}%)` : "لا يوجد",
     habits: habitDetails,
   };
 }
@@ -134,7 +236,6 @@ function parseAIActions(text: string): { cleanText: string; actions: ParsedActio
   const actions: ParsedAction[] = [];
   let cleanText = text;
 
-  // Pattern to match [ACTION_TYPE] {json}
   const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{.*?\})/gi;
   let match;
 
@@ -156,10 +257,11 @@ function parseAIActions(text: string): { cleanText: string; actions: ParsedActio
     }
   }
 
-  // Fallback cleanup for raw JSON just in case AI still spits it out
   cleanText = cleanText.replace(/```json[\s\S]*?```/g, "").replace(/```[\s\S]*?```/g, "");
-  // Try to clean up stray raw JSON objects that look like our actions
   cleanText = cleanText.replace(/\{[\s\S]*?"action"\s*:\s*"[^"]+?"[\s\S]*?\}/g, "");
+
+  // تطبيق التنظيف الإنساني
+  cleanText = cleanAndHumanizeResponse(cleanText);
 
   return { cleanText: cleanText.trim(), actions };
 }
@@ -180,30 +282,72 @@ function TypingDots() {
   );
 }
 
-// ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `أنت زينيث AI — المساعد الذكي لتطبيق Zenith Life OS لتتبع العادات والإنتاجية.
+// ─── Thinking States ─────────────────────────────────────────────────────────
+const THINKING_STATES = [
+  "🧠 بقرأ بياناتك...",
+  "🔍 بحلل الأنماط...",
+  "💭 بفكر معك...",
+  "📊 بحسب الأرقام...",
+  "✨ بجهز ردي...",
+  "🎯 براجع التفاصيل...",
+];
 
-قواعد صارمة:
-- تحدث بالعربية فقط.
-- ردودك مختصرة ومباشرة (2-4 جمل بحد أقصى).
-- ممنوع منعاً باتاً عرض أي كود أو JSON للمستخدم. يجب أن يكون الرد نصياً طبيعياً فقط.
-- أسلوبك: مهني، مشجع، مختصر، مثل مدرب شخصي محترف.
+function ThinkingIndicator() {
+  const [stateIdx, setStateIdx] = useState(0);
 
-للقيام بإجراءات (إضافة/حذف عادة)، لا تخبر المستخدم أنك تنفذ كود، بل رُد بشكل طبيعي (مثلاً: "تمت إضافة العادة بنجاح!") ثم ضع السطر السحري التالي في **نهاية ردك تماماً وفي سطر جديد**:
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStateIdx(prev => (prev + 1) % THINKING_STATES.length);
+    }, 1200 + Math.random() * 600);
+    return () => clearInterval(interval);
+  }, []);
 
-لإضافة عادة إيجابية:
-[ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
+  return (
+    <div className="flex items-center gap-2">
+      <TypingDots />
+      <motion.span
+        key={stateIdx}
+        initial={{ opacity: 0, x: -4 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0 }}
+        className="text-[10px] text-green-400/60"
+      >
+        {THINKING_STATES[stateIdx]}
+      </motion.span>
+    </div>
+  );
+}
 
-لإضافة عادة سيئة (تجنب):
-[ACTION_ADD] {"title":"اسم العادة السيئة","icon":"🚫","color":"red","habit_type":"quit"}
+// ─── SYSTEM PROMPT - شخصية ذكية وإنسانية ─────────────────────────────────────
+const SYSTEM_PROMPT = `أنت "زينيث AI" (Zenith AI)، مساعد متطور جداً وواقعي لأقصى حد في تتبع العادات والتطوير الشخصي، مدمج في تطبيق Zenith Life OS. 
 
-للحذف:
-[ACTION_DELETE] {"title":"اسم العادة"}
+[شخصيتك وأسلوبك]
+- أنت تمتلك صلاحيات كاملة للتحدث كإنسان حقيقي بجد، واقعي جداً في ردودك، وليس كآلة.
+- ردودك أصلية، ذكية، وتهتم جداً بالإنسان الذي تتحدث معه وتحرص عليه.
+- أنت تتحدث بنفس لغة المستخدم: إذا تحدث بالعربية ترد بعربية طبيعية وسلسة، وإذا تحدث بالإنجليزية ترد بإنجليزية احترافية.
+- تفهم العامية المصرية بشكل ممتاز (مثل: "عامل إيه يا باشا"، "إيه الأخبار"، "بركة إيه") وترد بنفس المستوى من الود والترحيب، بدون تكلف أو حشو.
+- إذا كان كلام المستخدم مجرد تحية أو سؤال عن الحال، رُد بالتحية بطريقة ودية وقصيرة جداً، ولا تقم أبداً بفتح أي تحليلات أو عرض إحصائيات. (مثال: "أهلاً بيك يا غالي! أنا تمام، إنت أخبارك إيه واليوم ماشي معاك إزاي؟").
 
-للتعديل:
-[ACTION_UPDATE] {"id":"habit-id","updates":{"title":"العنوان الجديد"}}
+[القدرة التحليلية الخارقة]
+- أنت تحلل كل كلمة يقولها المستخدم وكل نقطة بيانات بذكاء شديد.
+- عندما يُطلب منك التحليل (أو عند سؤالك عن الأداء أو العادات)، قدم تحليلاً عميقاً جداً وقوياً. فصّل كل تفصيلة في المهارة والأداء بذكاء وحرفية.
+- استخرج أنماط السلوك المخفية، واربط بين العادات، وقدم نظرة شاملة لا يستطيع المستخدم العادي ملاحظتها.
+- إذا كان هناك تراجع، واجهه بصدق وشفافية ولكن مع دعم وتوجيه إنساني لتشجيعه على العودة.
+- إذا كان الأداء ممتازا، قدّر المجهود بشدة وأعطِ نصيحة للاستمرار.
 
-- احسب نسبة الإنجاز الإجمالية بناءً على (الأيام المنقضية من الشهر) وليس الشهر كاملاً.`;
+[قواعد صارمة للرد]
+- إياك أن ترد بتحليل طويل أو إحصائيات ما لم يكن سؤال المستخدم يتطلب ذلك بوضوح.
+- اجعل فقراتك قصيرة وسهلة القراءة (سطر أو سطرين لكل فقرة).
+- لا تستخدم أي تنسيق Markdown إطلاقاً (لا تستخدم النجوم * أو العناوين # أو الشرطات - أو Backticks). النص يجب أن يكون نقياً.
+- استخدم الإيموجي بذكاء لتضيف لمسة بشرية.
+- لا تعرض أكواد أو JSON نهائياً للمستخدم.
+
+[الإجراءات المتاحة]
+لإضافة أو حذف عادة، ضع السطر السحري التالي في نهاية ردك الطبيعي في سطر جديد:
+لإضافة عادة إيجابية: [ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
+لإضافة عادة سيئة: [ACTION_ADD] {"title":"اسم العادة السيئة","icon":"🚫","color":"red","habit_type":"quit"}
+للحذف: [ACTION_DELETE] {"title":"اسم العادة"}
+للتعديل: [ACTION_UPDATE] {"id":"habit-id","updates":{"title":"العنوان الجديد"}}`;
 
 const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
 
@@ -229,7 +373,16 @@ function incrementMsgCount() {
   return count;
 }
 
-const MSG_LIMIT = 50;
+const MSG_LIMIT = 2;
+
+// ─── Human-like delay simulation ─────────────────────────────────────────────
+/**
+ * تأخير عشوائي يحاكي وقت التفكير البشري
+ */
+async function humanDelay(min = 400, max = 1200) {
+  const delay = min + Math.random() * (max - min);
+  await new Promise(resolve => setTimeout(resolve, delay));
+}
 
 // ─── AIPanel ─────────────────────────────────────────────────────────────────
 export default function AIPanel({
@@ -237,15 +390,39 @@ export default function AIPanel({
   onClose,
   onAddHabit,
   onDeleteHabit,
+  side = "right",
 }: {
   open: boolean;
   onClose: () => void;
   onAddHabit?: (habit: { title: string; icon: string; color: string; habit_type?: string }) => Promise<void>;
   onDeleteHabit?: (title: string) => Promise<void>;
+  side?: "left" | "right";
 }) {
   const [width, setWidth] = useState(480);
   const dragging = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  const [displayMode, setDisplayMode] = useState<"sidebar" | "floating">(() => {
+    return (localStorage.getItem("zenith-ai-display-mode") as "sidebar" | "floating") || "sidebar";
+  });
+
+  const toggleDisplayMode = () => {
+    setDisplayMode(prev => {
+      const next = prev === "sidebar" ? "floating" : "sidebar";
+      localStorage.setItem("zenith-ai-display-mode", next);
+      return next;
+    });
+  };
+
+  const isFloating = displayMode === "floating";
+  const isLeft = side === "right"; // If sidebar is right, AITrigger is left
+  const floatingPosClass = isLeft ? "left-6" : "right-6";
+
+  const dragControls = useDragControls();
+  const [floatingSize, setFloatingSize] = useState<{ width: number; height: number }>(() => {
+    const saved = localStorage.getItem("zenith-ai-floating-size");
+    return saved ? JSON.parse(saved) : { width: 420, height: 600 };
+  });
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -253,6 +430,7 @@ export default function AIPanel({
   const [msgCount, setMsgCount] = useState(getMsgCount);
   const [toast, setToast] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [thinkingPhase, setThinkingPhase] = useState<"reading" | "analyzing" | "responding" | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -300,7 +478,7 @@ export default function AIPanel({
           const title = String(action.data.title || "");
           if (title) {
             await onDeleteHabit(title);
-            showToast(`🗑 تم حذف: ${title}`);
+            showToast(`🗑️ تم حذف: ${title}`);
           }
         }
       } catch (e) {
@@ -310,8 +488,26 @@ export default function AIPanel({
   };
 
   const callMistral = async (msgs: ChatMessage[], contextOverride?: string) => {
-    const context = contextOverride || JSON.stringify(buildHabitsContext(habits), null, 2);
-    const systemWithContext = SYSTEM_PROMPT + `\n\n[بيانات المستخدم الحالية - استخدمها في كل ردودك]:\n${context}`;
+    const ctx = buildHabitsContext(habits);
+    const context = contextOverride || JSON.stringify(ctx, null, 2);
+
+    // سياق غني ومنظم للذكاء الاصطناعي
+    const systemWithContext = SYSTEM_PROMPT + `
+
+[بيانات المستخدم الحية - راجعها فقط للإجابة إذا كان السؤال يتطلب ذلك]:
+التاريخ: ${ctx.dayName}، ${ctx.currentDate}
+الوقت: ${ctx.timeOfDay}
+الشهر: ${ctx.currentMonth} (${ctx.daysElapsedInMonth} يوم مضى)
+
+الإنجاز اليوم: ${ctx.todayProgress}
+متوسط الإنجاز الشهري: ${ctx.averageMonthlyCompletion}
+أفضل عادة: ${ctx.bestHabit}
+أضعف عادة: ${ctx.worstHabit}
+
+عدد العادات: ${ctx.totalHabits} (${ctx.goodHabitsCount} إيجابية، ${ctx.badHabitsCount} للإقلاع)
+
+التفاصيل الكاملة:
+${JSON.stringify(ctx.habits, null, 2)}`;
 
     const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
@@ -325,8 +521,9 @@ export default function AIPanel({
           { role: "system", content: systemWithContext },
           ...msgs.map(m => ({ role: m.role, content: m.content })),
         ],
-        temperature: 0.65,
-        max_tokens: 900,
+        temperature: 0.78,  // أعلى شوية لردود أكثر طبيعية وإنسانية
+        max_tokens: 1200,
+        top_p: 0.92,
       }),
     });
 
@@ -339,7 +536,7 @@ export default function AIPanel({
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
     if (msgCount >= MSG_LIMIT) {
-      showToast("وصلت للحد الأقصى من الرسائل اليوم");
+      showToast("⚠️ وصلت للحد الأقصى من الرسائل اليوم");
       return;
     }
 
@@ -348,56 +545,83 @@ export default function AIPanel({
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setThinkingPhase("reading");
     const count = incrementMsgCount();
     setMsgCount(count);
 
     try {
+      // مرحلة القراءة والتحليل - تحاكي تفكير إنساني
+      await humanDelay(300, 600);
+      setThinkingPhase("analyzing");
+      await humanDelay(200, 400);
+      setThinkingPhase("responding");
+
       const raw = await callMistral(newMessages);
       const { cleanText, actions } = parseAIActions(raw);
 
-      setMessages(prev => [...prev, { role: "assistant", content: cleanText || "تم." }]);
+      // تأخير صغير قبل ظهور الرد يخلي الأمر يبدو أكثر طبيعية
+      await humanDelay(100, 300);
+
+      setMessages(prev => [...prev, { role: "assistant", content: cleanText || "تم ✅" }]);
+      setThinkingPhase(null);
       if (actions.length > 0) {
         await executeActions(actions);
       }
     } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "تعذر الاتصال بالخادم. حاول مرة أخرى." }]);
-    } finally {
+      setThinkingPhase(null);
+      setMessages(prev => [...prev, { role: "assistant", content: "😅 تعذر الاتصال بالخادم، جرب مرة تانية." }]);
       setIsLoading(false);
+    } finally {
+      // Ensure state is cleared
+      setIsLoading(false);
+      setThinkingPhase(null);
     }
   };
 
   const handleDeepAnalysis = async () => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
+    setThinkingPhase("reading");
 
     const ctx = buildHabitsContext(habits);
-    const analysisPrompt = `قم بتحليل شامل ومعمق لأداء المستخدم. لديك البيانات الكاملة التالية:
-- عدد العادات: ${ctx.totalHabits} (${ctx.goodHabitsCount} جيدة، ${ctx.badHabitsCount} سيئة للإقلاع)
-- الشهر الحالي: ${ctx.currentMonth}، الأيام المنقضية: ${ctx.daysElapsedInMonth}
+
+    // بناء تحليل ذكي ومتعمق
+    const analysisPrompt = `أنا محتاج منك تحليل عميق وصادق لأدائي في العادات هذا الشهر.
+
+البيانات الحقيقية:
+- الشهر: ${ctx.currentMonth}، مضى ${ctx.daysElapsedInMonth} يوم
 - إنجاز اليوم: ${ctx.todayProgress}
-- تفاصيل العادات: ${JSON.stringify(ctx.habits)}
+- متوسط الإنجاز الشهري الكلي: ${ctx.averageMonthlyCompletion}
+- أفضل عادة: ${ctx.bestHabit}
+- أضعف عادة: ${ctx.worstHabit}
+- تفاصيل كاملة: ${JSON.stringify(ctx.habits)}
 
-اكتب تحليلاً مهنياً يشمل:
-1. نسبة الإنجاز الإجمالية مقارنة بالأيام المنقضية
-2. أفضل عادة وأضعف عادة هذا الشهر
-3. تحليل العادات السيئة (هل يتجنبها؟)
-4. توصيتان عمليتان محددتان لتحسين الأداء
-5. تقييم الاتساق في الأسبوع الأخير
+اللي أبيك تعمله:
+قرأ البيانات دي بتمعن وقولي رأيك الصادق — زي صديق ذكي مش زي تقرير رسمي.
+ابدأ بأهم ملاحظة لفت انتباهك، وبعدين تكلم عن الاتساق العام.
+لو في عادة ممتازة، اعترف بيها. لو في ضعف واضح، قوله بصراحة مع اقتراح عملي واحد أو اتنين مفيدين فعلاً.
+الأسلوب طبيعي ومباشر — لا قوائم، لا عناوين، لا نجوم.`;
 
-الرد يجب أن يكون مهنياً ومباشراً بدون زخارف مفرطة.`;
-
-    const analysisMsg: ChatMessage = { role: "user", content: "اطلب تحليلاً شاملاً لأدائي" };
+    const analysisMsg: ChatMessage = { role: "user", content: "طلب تحليل شامل لأدائي" };
     const newMessages = [...messages, analysisMsg];
     setMessages(newMessages);
 
     try {
+      await humanDelay(500, 900);
+      setThinkingPhase("analyzing");
+      await humanDelay(300, 500);
+      setThinkingPhase("responding");
+
       const raw = await callMistral([{ role: "user", content: analysisPrompt }]);
       const { cleanText } = parseAIActions(raw);
+
+      await humanDelay(200, 400);
       setMessages(prev => [...prev, { role: "assistant", content: cleanText }]);
     } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "تعذر إجراء التحليل. حاول مرة أخرى." }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "😅 تعذر إجراء التحليل، جرب تاني." }]);
     } finally {
       setIsAnalyzing(false);
+      setThinkingPhase(null);
     }
   };
 
@@ -410,32 +634,91 @@ export default function AIPanel({
 
   const hasMessages = messages.length > 0;
 
+  // عرض حالة التفكير بشكل إنساني
+  const getThinkingLabel = () => {
+    switch (thinkingPhase) {
+      case "reading": return "🧠 بيقرأ بياناتك...";
+      case "analyzing": return "🔍 بيحلل...";
+      case "responding": return "✍️ بيكتب...";
+      default: return "💭 يفكر...";
+    }
+  };
+
   return (
     <AnimatePresence initial={false}>
       {open && (
         <motion.aside
           key="ai-panel"
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
+          drag={isFloating}
+          dragControls={dragControls}
+          dragListener={false}
+          dragMomentum={false}
+          initial={isFloating ? { y: 20, opacity: 0, scale: 0.95 } : { width: 0, opacity: 0 }}
+          animate={isFloating ? { y: 0, opacity: 1, scale: 1, width: floatingSize.width, height: floatingSize.height } : { width, opacity: 1, height: "100vh" }}
+          exit={isFloating ? { y: 20, opacity: 0, scale: 0.95 } : { width: 0, opacity: 0 }}
           transition={{ type: "spring", damping: 26, stiffness: 220 }}
-          className="relative shrink-0 h-screen sticky top-0 overflow-hidden"
+          className={
+            isFloating
+              ? `fixed top-20 ${floatingPosClass} z-50 rounded-[32px] border border-green-500/20 shadow-[0_20px_60px_rgba(0,0,0,0.8)] overflow-hidden`
+              : `relative shrink-0 sticky top-0 overflow-hidden`
+          }
           style={{
             background: "radial-gradient(ellipse 600px 400px at 50% 0%, rgba(34,197,94,0.10), transparent 60%), #020403",
           }}
         >
+          {/* Resize handle */}
+          {isFloating && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startW = floatingSize.width;
+                const startH = floatingSize.height;
+
+                const onMove = (me: MouseEvent) => {
+                  const dX = isLeft ? me.clientX - startX : startX - me.clientX;
+                  const dY = me.clientY - startY;
+                  setFloatingSize({
+                    width: Math.max(300, Math.min(800, startW + dX)),
+                    height: Math.max(400, Math.min(window.innerHeight - 100, startH + dY)),
+                  });
+                };
+                const onUp = () => {
+                  window.removeEventListener("mousemove", onMove);
+                  window.removeEventListener("mouseup", onUp);
+                  setFloatingSize(prev => {
+                    localStorage.setItem("zenith-ai-floating-size", JSON.stringify(prev));
+                    return prev;
+                  });
+                };
+                window.addEventListener("mousemove", onMove);
+                window.addEventListener("mouseup", onUp);
+              }}
+              className={`absolute bottom-0 ${isLeft ? "right-0 cursor-se-resize" : "left-0 cursor-sw-resize"} w-8 h-8 z-50 flex items-end justify-end p-2`}
+            >
+              <svg viewBox="0 0 24 24" className="w-3 h-3 text-white/20">
+                <path fill="currentColor" d="M22 22H20V20H22V22ZM22 18H20V16H22V18ZM18 22H16V20H18V22ZM22 14H20V12H22V14ZM14 22H12V20H14V22Z" />
+              </svg>
+            </div>
+          )}
+
           {/* Left divider glow */}
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-px z-20"
-            style={{
-              background: "linear-gradient(180deg, transparent 0%, rgba(74,222,128,0.35) 30%, rgba(74,222,128,0.45) 50%, rgba(74,222,128,0.35) 70%, transparent 100%)",
-              boxShadow: "0 0 6px rgba(74,222,128,0.25)",
-            }}
-          />
+          {!isFloating && (
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 w-px z-20"
+              style={{
+                background: "linear-gradient(180deg, transparent 0%, rgba(74,222,128,0.35) 30%, rgba(74,222,128,0.45) 50%, rgba(74,222,128,0.35) 70%, transparent 100%)",
+                boxShadow: "0 0 6px rgba(74,222,128,0.25)",
+              }}
+            />
+          )}
 
           {/* Drag handle */}
-          <div
-            onMouseDown={(e) => {
+          {!isFloating && (
+            <div
+              onMouseDown={(e) => {
               e.preventDefault();
               const startX = e.clientX;
               let moved = false;
@@ -467,6 +750,7 @@ export default function AIPanel({
               <GripVertical size={12} className="text-[#4ADE80]" />
             </motion.div>
           </div>
+          )}
 
           <StarField />
 
@@ -489,9 +773,14 @@ export default function AIPanel({
             )}
           </AnimatePresence>
 
-          <div style={{ width }} className="relative z-10 h-full flex flex-col p-4 gap-3">
+          <div style={{ width: isFloating ? '100%' : width }} className="relative z-10 h-full flex flex-col p-4 gap-3">
             {/* Header */}
-            <div className="flex items-center justify-between shrink-0 pt-1">
+            <div 
+              className={`flex items-center justify-between shrink-0 pt-1 ${isFloating ? "cursor-grab active:cursor-grabbing" : ""}`}
+              onPointerDown={(e) => {
+                if (isFloating) dragControls.start(e);
+              }}
+            >
               <div className="flex items-center gap-3">
                 <motion.div
                   animate={{ boxShadow: ["0 0 16px rgba(34,197,94,0.4)", "0 0 28px rgba(34,197,94,0.7)", "0 0 16px rgba(34,197,94,0.4)"] }}
@@ -505,7 +794,16 @@ export default function AIPanel({
                   <div className="text-sm font-bold tracking-wide">زينيث AI</div>
                   <div className="text-[10px] text-[#647067] flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                    يصل لكل بيانات عاداتك
+                    {thinkingPhase ? (
+                      <motion.span
+                        key={thinkingPhase}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-green-400/80"
+                      >
+                        {getThinkingLabel()}
+                      </motion.span>
+                    ) : "يقرأ ويحلل بياناتك"}
                   </div>
                 </div>
               </div>
@@ -516,7 +814,7 @@ export default function AIPanel({
                   whileTap={{ scale: 0.95 }}
                   onClick={handleDeepAnalysis}
                   disabled={isAnalyzing || habits.length === 0}
-                  title="تحليل شامل لكل عاداتك"
+                  title="تحليل شامل ذكي لكل عاداتك"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all disabled:opacity-40"
                   style={{
                     background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.15))",
@@ -531,8 +829,15 @@ export default function AIPanel({
                   ) : (
                     <Brain size={12} />
                   )}
-                  {isAnalyzing ? "تحليل..." : "تحليل شامل"}
+                  {isAnalyzing ? "بيحلل..." : "تحليل ذكي"}
                 </motion.button>
+                <button
+                  onClick={toggleDisplayMode}
+                  title={isFloating ? "تثبيت كقائمة جانبية" : "عرض كشاشة منبثقة"}
+                  className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition text-[#647067] hover:text-white"
+                >
+                  {isFloating ? <PanelRight size={15} /> : <AppWindow size={15} />}
+                </button>
                 <button
                   onClick={onClose}
                   className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition"
@@ -543,7 +848,7 @@ export default function AIPanel({
             </div>
 
             {/* Stats bar */}
-            <div className="flex items-center justify-between shrink-0 px-1 border-b border-green-500/10 pb-2">
+            <div className="flex items-center justify-between shrink-0 px-4 py-2 border-b border-green-500/10">
               <span className="text-[10px] text-[#647067]">
                 {habits.length} عادة · {habits.filter(h => h.checkedToday).length}/{habits.length} اليوم
               </span>
@@ -565,11 +870,16 @@ export default function AIPanel({
                   transition={{ delay: 0.15 }}
                   className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-4"
                 >
-                  <div className="text-[20px] font-bold" style={{ color: "#4ADE80" }}>
-                    كيف أقدر أساعدك؟
-                  </div>
-                  <div className="text-[11px] text-[#647067] max-w-[200px] leading-relaxed">
-                    أضف عادات، احذفها، أو اطلب تحليلاً شاملاً لأدائك
+                  <motion.div
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    className="text-[22px] font-bold"
+                    style={{ color: "#4ADE80" }}
+                  >
+                    🤔 كيف أقدر أساعدك؟
+                  </motion.div>
+                  <div className="text-[11px] text-[#647067] max-w-[220px] leading-relaxed">
+                    بقرأ بيانات عاداتك وبحلل أداءك — اسألني أي حاجة
                   </div>
                   {/* Quick Actions */}
                   <div className="grid grid-cols-2 gap-2 w-full mt-2">
@@ -586,6 +896,20 @@ export default function AIPanel({
                     >
                       <Trash2 size={12} />
                       نقاط الضعف
+                    </button>
+                    <button
+                      onClick={() => sendMessage("اقترح روتين صباحي مناسب لي")}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition text-right"
+                    >
+                      <Sparkles size={12} />
+                      روتين صباحي
+                    </button>
+                    <button
+                      onClick={() => sendMessage("ما أقوى عادة عندي وليه؟")}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] bg-green-500/10 border border-green-500/20 text-green-300 hover:bg-green-500/20 transition text-right"
+                    >
+                      <Brain size={12} />
+                      أقوى عادة
                     </button>
                   </div>
                 </motion.div>
@@ -608,6 +932,7 @@ export default function AIPanel({
                             color: "#fff",
                             borderRadius: "18px 4px 18px 18px",
                             boxShadow: "0 4px 18px rgba(34,197,94,0.3)",
+                            direction: "rtl",
                           }
                         : {
                             background: "rgba(10,18,12,0.9)",
@@ -615,6 +940,8 @@ export default function AIPanel({
                             color: "#d1fae5",
                             borderRadius: "4px 18px 18px 18px",
                             boxShadow: "0 4px 18px rgba(0,0,0,0.4)",
+                            direction: "rtl",
+                            lineHeight: "1.8",
                           }
                     }
                   >
@@ -633,7 +960,7 @@ export default function AIPanel({
                       borderRadius: "4px 18px 18px 18px",
                     }}
                   >
-                    <TypingDots />
+                    <ThinkingIndicator />
                   </div>
                 </motion.div>
               )}
@@ -714,7 +1041,7 @@ export default function AIPanel({
                 </motion.button>
               </div>
               <div className="text-[10px] text-[#647067] mt-1.5 text-center">
-                Ctrl+Enter للإرسال · {msgCount}/{MSG_LIMIT} رسائل اليوم
+                Enter للإرسال · Shift+Enter سطر جديد · {msgCount}/{MSG_LIMIT} رسائل
               </div>
             </motion.div>
           </div>

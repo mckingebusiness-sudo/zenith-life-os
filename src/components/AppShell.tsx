@@ -6,10 +6,19 @@ import AIPanel, { AITrigger } from "./AIFloatingButton";
 import { useDirection } from "@/stores/useDirection";
 import { useHabits } from "@/hooks/useHabits";
 
+// ─── AppShell ──────────────────────────────────────────────────────────────
 export default function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [aiOpen, setAiOpen] = useState(false);
+  
+  const [sidebarSide, setSidebarSide] = useState<"left" | "right">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("zenith-sidebar-side") as "left" | "right") || "right";
+    }
+    return "right";
+  });
+
   const draggingSidebar = useRef(false);
   const { dir } = useDirection();
   const { addHabitAsync, deleteHabit, habits } = useHabits();
@@ -33,7 +42,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     const move = (e: MouseEvent) => {
       if (!draggingSidebar.current) return;
-      setSidebarWidth(Math.min(420, Math.max(72, e.clientX)));
+      // If sidebar is on the right, dragging left means smaller X, so width = window.innerWidth - e.clientX
+      // If sidebar is on the left, dragging right means bigger X, so width = e.clientX
+      const newWidth = sidebarSide === "right" ? window.innerWidth - e.clientX : e.clientX;
+      setSidebarWidth(Math.min(420, Math.max(72, newWidth)));
     };
     const up = () => (draggingSidebar.current = false);
     window.addEventListener("mousemove", move);
@@ -42,12 +54,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
     };
-  }, [dir]);
+  }, [sidebarSide]);
+
+  const toggleSidebarSide = () => {
+    setSidebarSide(s => {
+      const n = s === "left" ? "right" : "left";
+      localStorage.setItem("zenith-sidebar-side", n);
+      return n;
+    });
+  };
+
+  const isRowFlow = (sidebarSide === "right" && dir === "rtl") || (sidebarSide === "left" && dir === "ltr");
 
   return (
     <div className="relative min-h-screen text-foreground">
       <BackgroundFX />
-      <div className={`relative z-10 flex min-h-screen ${dir === "rtl" ? "flex-row-reverse" : "flex-row"}`}>
+      <div className={`relative z-10 flex min-h-screen ${isRowFlow ? "flex-row" : "flex-row-reverse"}`}>
         {/* Sidebar */}
         <div className="print:hidden">
           <Sidebar
@@ -55,6 +77,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
             width={collapsed ? 72 : sidebarWidth}
             onToggle={() => setCollapsed((v) => !v)}
             onDragStart={() => (draggingSidebar.current = true)}
+            side={sidebarSide}
+            onToggleSide={toggleSidebarSide}
           />
         </div>
 
@@ -91,12 +115,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 await deleteHabit(found.id);
               }
             }}
+            side={sidebarSide}
           />
         </div>
       </div>
 
       {/* Floating trigger */}
-      {!aiOpen && <div className="print:hidden"><AITrigger onClick={() => setAiOpen(true)} /></div>}
+      {!aiOpen && (
+        <div className="print:hidden">
+          <AITrigger onClick={() => setAiOpen(true)} side={sidebarSide} />
+        </div>
+      )}
     </div>
   );
 }

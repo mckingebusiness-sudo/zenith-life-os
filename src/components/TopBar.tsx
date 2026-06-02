@@ -1,4 +1,4 @@
-import { Bell, Plus, Languages, Sun, Moon } from "lucide-react";
+import { Bell, Plus, ArrowLeftRight, Sun, Moon } from "lucide-react";
 import { useDirection } from "@/stores/useDirection";
 import { useTheme } from "@/stores/useTheme";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,15 @@ export default function TopBar() {
         <span className="tracking-[0.2em] uppercase">{t('topbar.missionControl')}</span>
       </div>
       <div className="flex items-center gap-3">
+        {/* Direction Toggle */}
+        <button
+          onClick={toggleDir}
+          className="w-9 h-9 rounded-xl bg-foreground/5 border border-border hover:bg-foreground/10 flex items-center justify-center transition group text-muted-foreground hover:text-foreground"
+          title={dir === "rtl" ? "عرض من اليسار إلى اليمين (LTR)" : "عرض من اليمين إلى اليسار (RTL)"}
+        >
+          <ArrowLeftRight size={15} />
+        </button>
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}

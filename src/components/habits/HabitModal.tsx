@@ -118,90 +118,93 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={{ opacity: 0, scale: 0.95, y: 10, filter: "blur(10px)" }}
+          animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, scale: 0.95, y: 10, filter: "blur(10px)" }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
           onClick={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="glass rounded-3xl w-full max-w-md overflow-hidden border border-white/10"
+            initial={{ opacity: 0, scale: 0.95, y: 10, filter: "blur(10px)" }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, scale: 0.95, y: 10, filter: "blur(10px)" }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
+            className="relative bg-[#09090B]/80 backdrop-blur-3xl rounded-[2.5rem] w-full max-w-md overflow-hidden border border-white/10 shadow-[0_0_80px_-20px_rgba(0,0,0,0.5)]"
           >
+            {/* Subtle inner top highlight */}
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
             {/* Header with preview */}
-            <div className="relative p-6 border-b border-white/10 overflow-hidden">
+            <div className="relative p-8 border-b border-white/5 overflow-hidden">
               <div
-                className="absolute inset-0 opacity-10"
-                style={{ background: `linear-gradient(135deg, ${selectedColorHex}, transparent)` }}
+                className="absolute inset-0 opacity-20 pointer-events-none"
+                style={{ background: `radial-gradient(circle at top right, ${selectedColorHex}40, transparent 70%)` }}
               />
               <div className="relative flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div
-                    className="w-16 h-16 rounded-3xl flex items-center justify-center text-4xl shadow-xl shadow-black/20"
-                    style={{ background: `linear-gradient(135deg, ${selectedColorHex}44, ${selectedColorHex}88)` }}
+                    className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-xl border border-white/10"
+                    style={{ background: `linear-gradient(135deg, ${selectedColorHex}33, ${selectedColorHex}11)` }}
                   >
                     {icon}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">
+                    <h2 className="text-xl font-bold text-white tracking-tight">
                       {habit ? "تعديل العادة" : "عادة جديدة"}
                     </h2>
-                    <p className="text-xs text-white/50">
+                    <p className="text-sm text-white/40 mt-0.5">
                       {title || "اكتب اسم العادة..."}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition"
+                  className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors border border-white/5"
                 >
-                  <X size={16} className="text-white/60" />
+                  <X size={18} className="text-white/60" />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
               {/* Title */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">اسم العادة *</label>
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">اسم العادة *</label>
                 <input
                   required
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={habitType === 'good' ? "مثال: القراءة لمدة 20 دقيقة" : "مثال: تضييع الوقت على السوشيال ميديا"}
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
+                  className="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 focus:bg-white/5 transition-all text-sm shadow-inner"
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الوصف (اختياري)</label>
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الوصف (اختياري)</label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={habitType === 'good' ? "لماذا تريد بناء هذه العادة؟" : "لماذا تريد تجنب هذه العادة؟"}
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all"
+                  className="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 focus:bg-white/5 transition-all text-sm shadow-inner"
                 />
               </div>
 
               {/* Icon */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الأيقونة</label>
-                <div className="grid grid-cols-10 gap-1.5 max-h-28 overflow-y-auto scrollbar-thin pr-1">
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الأيقونة</label>
+                <div className="grid grid-cols-8 gap-2 p-3 bg-black/40 rounded-2xl border border-white/5 max-h-36 overflow-y-auto scrollbar-thin">
                   {ICONS.map((i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setIcon(i)}
-                      className={`w-8 h-8 rounded-lg text-base flex items-center justify-center transition-all ${
+                      className={`aspect-square rounded-xl text-xl flex items-center justify-center transition-all ${
                         icon === i
-                          ? "bg-white/15 ring-2 ring-white/30 scale-110"
-                          : "bg-black/20 hover:bg-white/10"
+                          ? "bg-white/20 scale-110 shadow-lg border border-white/10"
+                          : "hover:bg-white/10"
                       }`}
                     >
                       {i}
@@ -212,17 +215,17 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Color */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">اللون</label>
-                <div className="flex flex-wrap gap-2">
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">اللون</label>
+                <div className="flex flex-wrap gap-3 p-4 bg-black/40 rounded-2xl border border-white/5">
                   {COLORS.map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setColor(c.id)}
-                      className={`w-7 h-7 rounded-full transition-all ${
+                      className={`w-8 h-8 rounded-full transition-all ${
                         color === c.id
-                          ? "ring-2 ring-white/80 ring-offset-2 ring-offset-black scale-110 shadow-lg"
-                          : "hover:scale-110 opacity-60 hover:opacity-100"
+                          ? "ring-2 ring-white/80 ring-offset-4 ring-offset-[#09090B] scale-110 shadow-lg"
+                          : "hover:scale-110 opacity-50 hover:opacity-100"
                       }`}
                       style={{ backgroundColor: c.hex }}
                       title={c.name}
@@ -233,21 +236,31 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Habit Type Toggle */}
               <div>
-                <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">نوع العادة</label>
-                <div className="flex gap-2">
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">نوع العادة</label>
+                <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5">
                   <button
                     type="button"
                     onClick={() => setHabitType('good')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'good' ? 'bg-green-500/20 border-green-500/40 text-green-400' : 'bg-white/5 border-white/10 text-white/50'}`}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                      habitType === 'good' 
+                        ? 'bg-green-500/20 text-green-400 shadow-sm border border-green-500/20' 
+                        : 'text-white/40 hover:text-white/70 border border-transparent'
+                    }`}
                   >
-                    ✅ عادة جيدة
+                    <span className="text-lg">🌱</span>
+                    عادة جيدة
                   </button>
                   <button
                     type="button"
                     onClick={() => setHabitType('quit')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${habitType === 'quit' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                      habitType === 'quit' 
+                        ? 'bg-red-500/20 text-red-400 shadow-sm border border-red-500/20' 
+                        : 'text-white/40 hover:text-white/70 border border-transparent'
+                    }`}
                   >
-                    🚫 عادة سيئة أتركها
+                    <span className="text-lg">🚫</span>
+                    عادة سيئة أتركها
                   </button>
                 </div>
               </div>
@@ -273,7 +286,7 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                     >
                       <div className="flex gap-2">
                         <div className="flex-1">
-                          <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">
+                          <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">
                             {habitType === 'good' ? 'القيمة المكتسبة في كل مرة' : 'القيمة الموفرة في كل مرة'}
                           </label>
                           <input
@@ -281,15 +294,15 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                             value={savedValuePerDay}
                             onChange={(e) => setSavedValuePerDay(e.target.value)}
                             placeholder="مثال: 2"
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/20 focus:outline-none focus:border-white/30 transition"
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-5 py-4 text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 focus:bg-white/5 transition-all text-sm shadow-inner"
                           />
                         </div>
                         <div className="w-28">
-                          <label className="block text-xs font-semibold text-[#8B9A90] mb-2 tracking-wide">الوحدة</label>
+                          <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الوحدة</label>
                           <select
                             value={savedUnit}
                             onChange={(e) => setSavedUnit(e.target.value)}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white/30 transition"
+                            className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-4 text-white focus:outline-none focus:border-white/20 focus:bg-white/5 transition-all text-sm appearance-none"
                           >
                             <option value="ساعة">ساعة</option>
                             <option value="جنيه">جنيه</option>
@@ -304,30 +317,52 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                 </AnimatePresence>
               </div>
 
+              {/* Apple Health Mockup Integration */}
+              {habitType === 'good' && (
+                <div className="pt-2">
+                  <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الربط مع التطبيقات (تجريبي)</label>
+                  <div className="flex items-center justify-between bg-black/40 border border-white/5 rounded-2xl px-5 py-4 cursor-pointer hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-lg">
+                        <span className="text-red-500 font-bold text-xl">❤️</span>
+                      </div>
+                      <div>
+                        <div className="text-white text-sm font-bold">Apple Health</div>
+                        <div className="text-white/40 text-xs mt-0.5">إكمال تلقائي بعد 8000 خطوة</div>
+                      </div>
+                    </div>
+                    {/* Toggle mock */}
+                    <div className="w-12 h-7 bg-white/10 rounded-full relative transition">
+                      <div className="w-5 h-5 bg-white/50 rounded-full absolute left-1 top-1 shadow-sm"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Buttons */}
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-4 pt-4 pb-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 px-4 py-3 rounded-xl transition font-medium"
+                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/5 text-white/70 px-4 py-4 rounded-2xl transition-all font-semibold text-sm"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !title.trim()}
-                  className="flex-1 text-white px-4 py-3 rounded-xl transition font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="flex-[2] text-white px-4 py-4 rounded-2xl transition-all font-bold text-sm disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-[1.02]"
                   style={{
-                    background: `linear-gradient(135deg, ${selectedColorHex}, ${selectedColorHex}cc)`,
-                    boxShadow: `0 4px 20px ${selectedColorHex}30`,
+                    background: `linear-gradient(135deg, ${selectedColorHex}, ${selectedColorHex}dd)`,
+                    boxShadow: `0 8px 30px -10px ${selectedColorHex}80`,
                   }}
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <Sparkles size={16} />
-                      حفظ
+                      <Sparkles size={18} className="opacity-80" />
+                      حفظ العادة
                     </>
                   )}
                 </button>

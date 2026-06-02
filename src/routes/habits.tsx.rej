@@ -1,0 +1,9 @@
+diff a/src/routes/habits.tsx b/src/routes/habits.tsx	(rejected hunks)
+@@ -7,6 +7,7 @@ import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
+ import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
+ import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
+ import { AITicker } from "@/components/habits/AITicker";
++import { DailyMoodCheckIn } from "@/components/habits/DailyMoodCheckIn";
+ import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw } from "lucide-react";
+ import { useState, useEffect, useRef, Component } from "react";
+ import { supabase } from "@/lib/supabase";

@@ -3,7 +3,7 @@
 @import "tw-animate-css";
 
 @theme inline {
-  --font-cairo: "Cairo", sans-serif;
+  --font-cairo: "Tajawal", "Inter", sans-serif;
   --font-inter: "Inter", sans-serif;
   --color-background: var(--bg);
   --color-foreground: var(--fg);
@@ -19,8 +19,8 @@
   --fg: #000000;
   --muted: #F5F5F5;
   --muted-fg: #666666;
-  --accent: #15803D;
-  --primary: #22C55E;
+  --accent: #0f766e;
+  --primary: #0d9488;
   --border: rgba(0,0,0,0.1);
   --glass-bg: rgba(255,255,255,0.7);
   --glass-border: rgba(0,0,0,0.1);
@@ -34,8 +34,8 @@
   --fg: #F4F7F5;
   --muted: #1A211D;
   --muted-fg: #A7B3AB;
-  --accent: #4ADE80;
-  --primary: #22C55E;
+  --accent: #34d399;
+  --primary: #10b981;
   --border: rgba(255,255,255,0.08);
   --glass-bg: rgba(10,16,13,0.62);
   --glass-border: rgba(255,255,255,0.08);
@@ -48,7 +48,7 @@ html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font-family: "Cairo", sans-serif;
+  font-family: "Tajawal", "Inter", sans-serif;
   overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -73,7 +73,7 @@ html, body, #root {
 }
 
 .text-grad-green {
-  background: linear-gradient(135deg, #4ADE80 0%, #A7C957 100%);
+  background: linear-gradient(135deg, #34D399 0%, #059669 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -82,17 +82,70 @@ html, body, #root {
 @media print {
   html, body, #root {
     height: auto !important;
-    background-color: white !important;
-    color: black !important;
+    background-color: #09090B !important;
+    color: #F8FAFC !important;
     overflow: visible !important;
+    font-family: 'Segoe UI', 'Tajawal', 'Arial', sans-serif !important;
   }
-  
+
+  /* Force all backgrounds and colours to print correctly */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
-  
+
+  /* Page setup: A4, landscape-friendly margins */
   @page {
-    margin: 1cm;
+    size: A4 portrait;
+    margin: 0;
   }
+
+  /* Prevent content from splitting badly across pages */
+  table { page-break-inside: avoid; }
+  tr    { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+
+  /* Hide interactive UI elements when printing */
+  button,
+  [data-html2canvas-ignore],
+  .print\:hidden {
+    display: none !important;
+  }
+}
+
+/* ── Performance & Smoothness Optimizations ── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* GPU Acceleration for Glassmorphism & Blurs */
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl,
+.backdrop-blur-2xl,
+.glass,
+.glass-strong {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Prevent layout shifts on transitions */
+.transition-all,
+.transition {
+  will-change: transform, opacity;
+}
+
+/* Clean Custom Scrollbar Utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

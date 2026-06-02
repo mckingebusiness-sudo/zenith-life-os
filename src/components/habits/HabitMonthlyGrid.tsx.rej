@@ -1,0 +1,38 @@
+diff a/src/components/habits/HabitMonthlyGrid.tsx b/src/components/habits/HabitMonthlyGrid.tsx	(rejected hunks)
+@@ -380,9 +380,34 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
+                       {habit.icon || "Γ£¿"}
+                     </div>
+                     <div className="flex flex-col min-w-0">
+-                      <span className="font-semibold text-xs text-white/90 truncate flex items-center gap-1" title={habit.title}>
++                      <span className="font-semibold text-xs text-white/90 truncate flex items-center gap-1 flex-wrap" title={habit.title}>
+                         {habit.title}
+-                        {habit.habit_type === 'quit' && <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">≡ƒÜ½ ╪│┘è╪ª╪⌐</span>}
++                        {(() => {
++                          if (habit.habit_type === 'quit') {
++                            return <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">≡ƒÜ½ ╪│┘è╪ª╪⌐</span>;
++                          }
++                          const createdAt = (habit as any).created_at ? new Date((habit as any).created_at) : new Date();
++                          const daysActive = Math.max(1, Math.floor((new Date().getTime() - createdAt.getTime()) / 86400000));
++                          const total = habit.streak?.total_checkins || 0;
++                          const rate = total / daysActive;
++                          let diffLabel = "";
++                          let diffColor = "";
++                          if (rate < 0.5) {
++                            diffLabel = "╪╡╪╣╪¿";
++                            diffColor = "text-red-400 bg-red-500/10";
++                          } else if (rate <= 0.8) {
++                            diffLabel = "┘à╪¬┘ê╪│╪╖";
++                            diffColor = "text-orange-400 bg-orange-500/10";
++                          } else {
++                            diffLabel = "╪│┘ç┘ä ╪¼╪»╪º┘ï";
++                            diffColor = "text-green-400 bg-green-500/10";
++                          }
++                          return (
++                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${diffColor}`}>
++                              {diffLabel}
++                            </span>
++                          );
++                        })()}
+                       </span>
+                       {habit.habit_type === 'quit' ? (
+                         habit.relapsedToday

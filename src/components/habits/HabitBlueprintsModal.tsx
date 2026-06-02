@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Check, Trash } from "lucide-react";
 import { Habit } from "@/hooks/useHabits";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  addHabit: (habit: Partial<Habit>) => Promise<void>;
+  bulkAddHabits: (habits: Partial<Habit>[]) => Promise<any>;
 };
 
 const BLUEPRINTS = [
@@ -196,7 +197,7 @@ const BLUEPRINTS = [
   }
 ];
 
-export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
+export function HabitBlueprintsModal({ isOpen, onClose, bulkAddHabits }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [customBlueprints, setCustomBlueprints] = useState<any[]>([]);
@@ -204,28 +205,31 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
   // Load custom templates when modal opens
   useEffect(() => {
     if (isOpen) {
-      try {
-        const stored = localStorage.getItem('zenith_custom_templates');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setCustomBlueprints(parsed.map((p: any) => ({
-            id: p.id,
-            title: p.name,
-            icon: "⭐",
-            color: "amber",
-            description: "قالب مخصص",
-            habits: p.habits.map((h: any) => ({
-              title: h.title,
-              icon: h.icon,
-              color: h.color,
-              habit_type: h.type || h.habit_type || 'good'
-            })),
-            isCustom: true
-          })));
+      const loadTemplates = async () => {
+        try {
+          const { data, error } = await supabase.from('habit_templates').select('*');
+          if (error) throw error;
+          if (data) {
+            setCustomBlueprints(data.map((p: any) => ({
+              id: p.id,
+              title: p.name,
+              icon: "⭐",
+              color: "amber",
+              description: "قالب مخصص",
+              habits: Array.isArray(p.habits) ? p.habits.map((h: any) => ({
+                title: h.title,
+                icon: h.icon,
+                color: h.color,
+                habit_type: h.type || h.habit_type || 'good'
+              })) : [],
+              isCustom: true
+            })));
+          }
+        } catch (e) {
+          console.error("Failed to load custom templates from DB", e);
         }
-      } catch (e) {
-        console.error("Failed to load custom templates", e);
-      }
+      };
+      loadTemplates();
     }
   }, [isOpen]);
 
@@ -233,20 +237,19 @@ export function HabitBlueprintsModal({ isOpen, onClose, addHabit }: Props) {
     setLoading(bp.id);
     try {
       toast.success(`جاري تطبيق القالب: ${bp.title}...`);
-      for (let i = 0; i < bp.habits.length; i++) {
-        const h = bp.habits[i];
-        await addHabit({
-          ...h,
-          cadence: "daily",
-          target_per_period: 1,
-          active_weekdays: [0, 1, 2, 3, 4, 5, 6],
-          grace_days: 0,
-          is_private: false,
-          sort_order: i,
-        });
-        // Small delay between saves to avoid DB conflicts
-        await new Promise(r => setTimeout(r, 200));
-      }
+      
+      const payloads = bp.habits.map((h: any, i: number) => ({
+        ...h,
+        cadence: "daily",
+        target_per_period: 1,
+        active_weekdays: [0, 1, 2, 3, 4, 5, 6],
+        grace_days: 0,
+        is_private: false,
+        sort_order: i,
+      }));
+
+      await bulkAddHabits(payloads);
+
       toast.success(`تم إضافة عادات ${bp.title} بنجاح!`);
       setDone(bp.id);
       setTimeout(() => {

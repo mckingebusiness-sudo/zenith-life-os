@@ -7,10 +7,11 @@ import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
 import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
 import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
 import { AITicker } from "@/components/habits/AITicker";
-import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw } from "lucide-react";
+import { DailyMoodCheckIn } from "@/components/habits/DailyMoodCheckIn";
+import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw, HelpCircle, X, Shield, Flame, Snowflake, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef, Component } from "react";
 import { supabase } from "@/lib/supabase";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import confetti from "canvas-confetti";
@@ -56,7 +57,7 @@ function HabitsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse } = useHabits(currentDate);
+  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, bulkAddHabits, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse } = useHabits(currentDate);
   const [burst, setBurst] = useState<string | null>(null);
   const [isBlueprintsOpen, setIsBlueprintsOpen] = useState(false);
   const confettiFiredRef = useRef<string | null>(null);
@@ -69,6 +70,7 @@ function HabitsPage() {
 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitWithStreak | null>(null);
 
   const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
@@ -211,62 +213,72 @@ function HabitsPage() {
         {/* ─── Top Header ─── */}
         <div className="print:hidden">
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 glass p-5 rounded-2xl border border-border relative overflow-hidden"
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 bg-black/40 backdrop-blur-2xl p-6 rounded-3xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] relative overflow-hidden group"
           >
-          <div className="absolute inset-0 bg-primary/5 via-transparent to-transparent opacity-50" />
-          <div className="relative flex items-center gap-4">
-            <div className="bg-primary/10 p-3.5 rounded-2xl border border-primary/10">
-              <Calendar className="text-primary" size={24} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-                {t('habits.title')}
-                <Sparkles size={16} className="text-primary/60" />
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {currentTime.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                {" \u2022 "}
-                {currentTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </div>
-
-          <div className="relative flex items-center gap-3">
-            {/* Month Navigation */}
-            <div className="flex items-center gap-1 bg-foreground/5 p-1 rounded-xl border border-border">
-              <button
-                onClick={prevMonth}
-                className="w-9 h-9 flex items-center justify-center hover:bg-foreground/10 rounded-lg transition text-muted-foreground hover:text-foreground"
-              >
-                <ChevronRight size={18} />
-              </button>
-              <div className="w-36 text-center font-bold text-foreground text-sm px-2">
-                {currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+            {/* Subtle animated background glow */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-transparent blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
+            
+            <div className="relative flex items-center gap-5">
+              <div className="relative">
+                <div className="absolute inset-0 bg-green-500/20 blur-xl rounded-full" />
+                <div className="relative bg-gradient-to-br from-green-400/20 to-emerald-600/20 p-4 rounded-2xl border border-green-500/30 shadow-inner">
+                  <Calendar className="text-green-400" size={28} />
+                </div>
               </div>
-              <button
-                onClick={nextMonth}
-                disabled={isCurrentMonth}
-                className="w-9 h-9 flex items-center justify-center hover:bg-foreground/10 rounded-lg transition text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:pointer-events-none"
-              >
-                <ChevronLeft size={18} />
-              </button>
+              <div>
+                <h1 className="text-2xl font-black text-white flex items-center gap-2 tracking-tight">
+                  {t('habits.title')}
+                  <button 
+                    onClick={() => setShowGuideModal(true)}
+                    className="mr-2 text-white/30 hover:text-white/80 transition-colors p-1 rounded-full hover:bg-white/10"
+                    title="كيف تعمل الحديقة؟"
+                  >
+                    <HelpCircle size={18} />
+                  </button>
+                  <Sparkles size={18} className="text-green-400/80 animate-pulse mr-1" />
+                </h1>
+                <p className="text-sm font-medium text-[#A7B3AB] mt-1.5 flex items-center gap-2">
+                  <span>{currentTime.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                  <span className="w-1 h-1 rounded-full bg-white/20" />
+                  <span className="text-white/60">{currentTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+                </p>
+              </div>
             </div>
 
+            <div className="relative flex items-center gap-4 w-full sm:w-auto">
+              {/* Month Navigation */}
+              <div className="flex items-center gap-1 bg-black/50 p-1.5 rounded-2xl border border-white/5 backdrop-blur-md shadow-inner flex-1 sm:flex-none justify-between sm:justify-start">
+                <button
+                  onClick={prevMonth}
+                  className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-xl transition-all text-white/50 hover:text-white"
+                >
+                  <ChevronRight size={20} />
+                </button>
+                <div className="w-32 text-center font-bold text-white text-sm px-2 tracking-wide">
+                  {currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+                </div>
+                <button
+                  onClick={nextMonth}
+                  disabled={isCurrentMonth}
+                  className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-xl transition-all text-white/50 hover:text-white disabled:opacity-20 disabled:pointer-events-none"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+              </div>
 
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={openAddModal}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg transition-all font-semibold"
-            >
-              <Plus size={20} />
-              <span className="hidden sm:inline">{t('habits.newHabit')}</span>
-            </motion.button>
-          </div>
-        </motion.div>
+              <motion.button
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={openAddModal}
+                className="flex items-center justify-center gap-2 px-5 py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-2xl shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all font-bold"
+              >
+                <Plus size={20} />
+                <span className="hidden sm:inline">{t('habits.newHabit')}</span>
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
 
         {habits.length === 0 ? (
@@ -305,7 +317,8 @@ function HabitsPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            <div className="print:hidden">
+            <div className="print:hidden space-y-8">
+              <DailyMoodCheckIn />
               <HabitMonthlyGrid
                 habits={habits}
                 currentDate={currentDate}
@@ -316,22 +329,136 @@ function HabitsPage() {
                 onFreeze={freezeHabit}
                 burstId={burst}
                 onResetStreak={resetStreak}
+                onUndoRelapse={undoRelapse}
             />
             </div>
             <HabitsAnalytics habits={habits} currentDate={currentDate} />
             <div className="print:hidden space-y-8">
+              <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} onToggleRelapse={handleToggleRelapse} />
+            </div>
+            
+            {/* Visual Separator as requested by user */}
+            <div className="print:hidden w-full flex items-center justify-center py-8">
+              <div className="w-1/3 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+            </div>
+
+            <div className="print:hidden mt-8">
               <BadHabitsTracker
                 habits={habits}
                 onResetStreak={resetStreak}
                 onUndoRelapse={undoRelapse}
               />
-              <HabitsGardenLarge habits={habits} onCheckIn={handleCheckIn} onToggleRelapse={handleToggleRelapse} />
             </div>
             <div className="print:hidden">
               <AITicker habits={habits} />
             </div>
           </div>
         )}
+
+      {/* ─── Guide Modal ─── */}
+      <AnimatePresence>
+        {showGuideModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowGuideModal(false)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: -10 }}
+              className="relative w-full max-w-lg bg-[#0F1412] rounded-3xl border border-white/10 shadow-2xl overflow-hidden my-8 flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#0F1412]/80 backdrop-blur z-10 shrink-0">
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-1">دليل الحديقة المبسط</h2>
+                  <p className="text-sm text-white/50">كيفية استخدام نظام العادات والسلاسل</p>
+                </div>
+                <button
+                  onClick={() => setShowGuideModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-green-500/10 text-green-400 flex items-center justify-center shrink-0">
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white mb-1">العادة الجيدة</h3>
+                    <p className="text-xs text-[#A7B3AB] leading-relaxed">
+                      وهي العادة التي تتطلب منك فعلاً إيجابياً خلال اليوم. اضغط عليها لإنجازها وستظهر باللون الأخضر.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center shrink-0">
+                    <Shield size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white mb-1">العادة السيئة</h3>
+                    <p className="text-xs text-[#A7B3AB] leading-relaxed">
+                      تنجح تلقائياً بنهاية اليوم إن لم تنتكس (مجرد الامتناع يكفي)، وتأخذ مساراً تلقائياً إلا إذا قمت بكسرها.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white mb-1">الانتكاسة (Relapse)</h3>
+                    <p className="text-xs text-[#A7B3AB] leading-relaxed">
+                      في حال فعلت العادة السيئة، اضغط زر ⚠️ لتسجيل الانتكاسة، وسيحمر المربع دلالة على الخطأ.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center shrink-0">
+                    <Flame size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white mb-1">السلسلة (الستريك)</h3>
+                    <p className="text-xs text-[#A7B3AB] leading-relaxed">
+                      عداد يحسب أيام التزامك المتتالية. الانقطاع لأي سبب يعيد هذا العداد للصفر لتبدأ من جديد.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+                    <Snowflake size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white mb-1">التجميد (Freeze)</h3>
+                    <p className="text-xs text-[#A7B3AB] leading-relaxed">
+                      استخدم التجميد لحماية سلسلتك في الأيام التي تصاب فيها بمرض أو ظروف تمنعك من إنجاز عادتك، يحافظ على رقم الستريك بدون زيادته.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-white/5 shrink-0 bg-[#0F1412]">
+                <button
+                  onClick={() => setShowGuideModal(false)}
+                  className="w-full py-3 bg-white/10 hover:bg-white/15 text-white font-bold rounded-xl transition-colors"
+                >
+                  فهمت، شكراً
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
         <HabitModal
           isOpen={isModalOpen}
@@ -342,7 +469,7 @@ function HabitsPage() {
         <HabitBlueprintsModal
           isOpen={isBlueprintsOpen}
           onClose={() => setIsBlueprintsOpen(false)}
-          addHabit={addHabitAsync}
+          bulkAddHabits={bulkAddHabits}
         />
       </div>
     </HabitsErrorBoundary>

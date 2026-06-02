@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { HabitWithStreak, HabitColor } from "@/hooks/useHabits";
 import { calculateTodayProgress, isHabitHandledToday, isHabitSuccessOnDay } from "@/lib/habitCalculations";
-import { Edit2, Trash2, Check, Flame, Award, AlertTriangle, PauseCircle, ChevronRight, ChevronLeft, Info, Trophy, Sparkles, Shield, Snowflake, Clock, Star } from "lucide-react";
+import { Edit2, Trash2, Check, Flame, Award, AlertTriangle, PauseCircle, ChevronRight, ChevronLeft, Info, Trophy, Sparkles, Shield, Snowflake, Clock, Star, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ type Props = {
   burstId: string | null;
   onResetStreak?: (id: string, reason: string) => Promise<void>;
   onFreeze?: (id: string, dateStr: string, monthStr: string) => void;
+  onUndoRelapse?: (id: string) => Promise<void>;
 };
 
 const COLORS: Record<string, string> = {
@@ -27,7 +28,7 @@ const COLORS: Record<string, string> = {
   pink: "#EC4899", rose: "#F43F5E", brown: "#A52A2A",
 };
 
-export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDelete, onUndelete, burstId, onResetStreak, onFreeze }: Props) {
+export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDelete, onUndelete, burstId, onResetStreak, onFreeze, onUndoRelapse }: Props) {
   const today = new Date();
   const todayLocal = new Intl.DateTimeFormat("en-CA").format(today);
   const year = currentDate.getFullYear();
@@ -56,6 +57,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
   const [journalHabitId, setJournalHabitId] = useState<string | null>(null);
   const [journalDayLocal, setJournalDayLocal] = useState<string | null>(null);
   const [journalText, setJournalText] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
 
   const handleCheckInWithJournal = async (habitId: string, dayLocal: string) => {
     onCheckIn(habitId, dayLocal, "check");
@@ -167,111 +169,146 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
     <div className="w-full pb-6">
       {/* ─── Premium Stats Bar ─── */}
       {isCurrentMonth ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
           {/* Circular Progress */}
-          <div className="lg:col-span-1 glass rounded-2xl p-5 border border-white/5 flex items-center gap-5 group hover:border-green-500/20 transition-all duration-300">
-            <div className="relative w-20 h-20 shrink-0">
-              <svg className="w-20 h-20 -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+          <div className="glass rounded-3xl p-6 border border-white/5 flex items-center gap-5 group hover:border-green-500/40 hover:-translate-y-1.5 hover:shadow-[0_10px_40px_rgba(74,222,128,0.15)] transition-all duration-500 relative overflow-hidden backdrop-blur-2xl bg-black/40">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative w-24 h-24 shrink-0">
+              <svg className="w-24 h-24 -rotate-90 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="8" />
                 <motion.circle
-                  cx="50" cy="50" r="40" fill="none"
+                  cx="50" cy="50" r="42" fill="none"
                   stroke="url(#progressGradient)" strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={circumference}
                   initial={{ strokeDashoffset: circumference }}
                   animate={{ strokeDashoffset }}
-                  transition={{ duration: 1, ease: "easeOut" }}
+                  transition={{ duration: 1.5, ease: "easeOut" }}
                 />
                 <defs>
                   <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#4ADE80" />
-                    <stop offset="100%" stopColor="#22D3EE" />
+                    <stop offset="100%" stopColor="#059669" />
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-lg font-black text-white">{pct}%</span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-black text-white tracking-tighter">{pct}%</span>
               </div>
             </div>
-            <div>
-              <div className="text-[#A7B3AB] text-xs mb-0.5">التقدم اليومي</div>
-              <div className="text-white font-bold text-lg">{totalSuccess}/{totalItems}</div>
-              <div className="text-[10px] text-green-400/60 mt-0.5">
-                {pct === 100 ? "🎉 يوم مثالي!" : pct >= 50 ? "💪 استمر!" : "🚀 ابدأ الآن!"}
+            <div className="flex-1">
+              <div className="text-[#A7B3AB] text-xs font-bold uppercase tracking-widest mb-1">التقدم اليومي</div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-white font-black text-3xl">{totalSuccess}</span>
+                <span className="text-white/30 text-sm font-bold">/ {totalItems}</span>
+              </div>
+              <div className="text-[10px] text-white/40 font-medium mt-0.5">
+                ( {completedGood} إنجاز إيجابي + {avoidedBad} تجنب سلبي )
+              </div>
+              <div className="text-xs font-medium mt-1">
+                {pct === 100 ? (
+                  <span className="text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">🎉 يوم مثالي!</span>
+                ) : pct >= 50 ? (
+                  <span className="text-emerald-400">💪 استمر!</span>
+                ) : (
+                  <span className="text-white/50">🚀 ابدأ الآن!</span>
+                )}
               </div>
               {/* Phase 7.2 – urgency text after 6PM when incomplete */}
               {pct < 100 && today.getHours() >= 18 && (
-                <div className="flex items-center gap-1 mt-1.5 text-[10px] text-amber-400/80">
-                  <Clock size={10} />
-                  تبقى {23 - today.getHours()} ساعة لإكمال عادات اليوم
+                <div className="flex items-center gap-1.5 mt-2 text-[11px] font-bold text-amber-400/90 bg-amber-500/10 px-2 py-1 rounded-lg w-fit whitespace-nowrap">
+                  <Clock size={12} className="shrink-0" />
+                  تبقى {
+                    23 - today.getHours() > 0 
+                      ? `${23 - today.getHours()} ساعة و ${59 - today.getMinutes()} دقيقة`
+                      : `${59 - today.getMinutes()} دقيقة`
+                  }
                 </div>
               )}
             </div>
           </div>
 
           {/* Good Habits Completed */}
-          <div className="glass rounded-2xl p-5 border border-white/5 group hover:border-green-500/20 transition-all duration-300">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center">
-                <Check className="text-green-400" size={20} />
+          <div className="glass rounded-3xl p-6 border border-white/5 group hover:border-green-500/40 hover:-translate-y-1.5 hover:shadow-[0_10px_40px_rgba(34,197,94,0.15)] transition-all duration-500 relative overflow-hidden backdrop-blur-2xl bg-black/40 flex flex-col justify-between">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div>
+              <div className="relative flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-400/20 to-emerald-600/20 flex items-center justify-center border border-green-500/20 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <Check className="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]" size={24} />
+                </div>
               </div>
-              <span className="text-xs text-[#A7B3AB]">عادات جيدة تمت</span>
+              <div className="text-[#A7B3AB] text-xs font-bold uppercase tracking-widest mb-1">عادات جيدة تمت</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-black text-white drop-shadow-md">{completedGood}</span>
+                <span className="text-base text-white/30 font-bold">/ {totalGood}</span>
+              </div>
             </div>
-            <div className="flex items-end gap-1">
-              <span className="text-3xl font-black text-green-400">{completedGood}</span>
-              <span className="text-sm text-white/30 mb-1">من {totalGood}</span>
-            </div>
-            <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div className="mt-5 h-2 bg-white/5 rounded-full overflow-hidden relative">
               <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
+                className="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-green-400 to-emerald-600 shadow-[0_0_10px_rgba(74,222,128,0.5)]"
                 initial={{ width: 0 }}
                 animate={{ width: `${totalGood > 0 ? Math.round((completedGood / totalGood) * 100) : 0}%` }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
+                transition={{ duration: 1, ease: "easeOut" }}
               />
             </div>
           </div>
 
           {/* Bad Habits Avoided */}
-          <div className="glass rounded-2xl p-5 border border-white/5 group hover:border-orange-500/20 transition-all duration-300">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
-                <AlertTriangle className="text-red-400" size={20} />
+          <div className="glass rounded-3xl p-6 border border-white/5 group hover:border-teal-500/40 hover:-translate-y-1.5 hover:shadow-[0_10px_40px_rgba(45,212,191,0.15)] transition-all duration-500 relative overflow-hidden backdrop-blur-2xl bg-black/40 flex flex-col justify-between">
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div>
+              <div className="relative flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-400/20 to-cyan-600/20 flex items-center justify-center border border-teal-500/20 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <Shield className="text-teal-400 drop-shadow-[0_0_8px_rgba(45,212,191,0.5)]" size={24} />
+                </div>
               </div>
-              <span className="text-xs text-[#A7B3AB]">تم تجنبها (سيئة)</span>
+              <div className="text-[#A7B3AB] text-xs font-bold uppercase tracking-widest mb-1">تجنب العادات السيئة</div>
+              {totalBad > 0 ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-black text-white drop-shadow-md">{avoidedBad}</span>
+                  <span className="text-base text-white/30 font-bold">/ {totalBad}</span>
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-1 mt-2">
+                  <span className="text-xl font-bold text-white/40">لا يوجد</span>
+                </div>
+              )}
             </div>
-            {totalBad > 0 ? (
-              <>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-red-400">{avoidedBad}</span>
-                  <span className="text-sm text-white/30">من {totalBad}</span>
-                </div>
-                <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-red-500 to-orange-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.round((avoidedBad / totalBad) * 100)}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-lg font-bold text-white/40">لا يوجد</span>
+            {totalBad > 0 && (
+              <div className="mt-5 h-2 bg-white/5 rounded-full overflow-hidden relative">
+                <motion.div
+                  className="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-teal-400 to-cyan-600 shadow-[0_0_10px_rgba(45,212,191,0.5)]"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.round((avoidedBad / totalBad) * 100)}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                />
               </div>
             )}
           </div>
 
           {/* Best Streak */}
-          <div className="glass rounded-2xl p-5 border border-white/5 group hover:border-amber-500/20 transition-all duration-300">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                <Award className="text-amber-400" size={20} />
+          <div className="glass rounded-3xl p-6 border border-white/5 group hover:border-amber-500/40 hover:-translate-y-1.5 hover:shadow-[0_10px_40px_rgba(245,158,11,0.15)] transition-all duration-500 relative overflow-hidden backdrop-blur-2xl bg-black/40 flex flex-col justify-between">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div>
+              <div className="relative flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400/20 to-orange-600/20 flex items-center justify-center border border-amber-500/20 shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <Award className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" size={24} />
+                </div>
+                <div className="px-3 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <span className="text-xs font-bold text-amber-400">🔥 أسطوري</span>
+                </div>
               </div>
-              <span className="text-xs text-[#A7B3AB]">أفضل سلسلة 🔥</span>
+              <div className="text-[#A7B3AB] text-xs font-bold uppercase tracking-widest mb-1">أفضل سلسلة مستمرة</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-300 to-orange-500 drop-shadow-sm">{bestStreak}</span>
+                <span className="text-sm text-amber-400/50 font-bold">يوم</span>
+              </div>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-black text-amber-400">{bestStreak}</span>
-              <span className="text-sm text-white/30">يوم متتالي</span>
+            
+            <div className="mt-5 flex gap-1 h-2">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className={`flex-1 rounded-full ${i < Math.min(5, Math.ceil(bestStreak / 5)) ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'bg-white/5'}`} />
+              ))}
             </div>
           </div>
         </div>
@@ -287,21 +324,13 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
         </div>
       )}
 
-      {/* ─── Info Guide ─── */}
-      <div className="mb-6 flex flex-wrap items-center gap-4 text-[11px] text-[#A7B3AB] bg-white/[0.02] p-4 rounded-2xl border border-white/[0.04]">
-        <div className="flex items-center gap-1.5"><Info size={13} className="text-blue-400" /> <b>دليل مبسط:</b></div>
-        <div className="flex items-center gap-1.5"><Sparkles size={13} className="text-green-400" /> <b className="text-white">العادة الجيدة:</b> قم بالضغط عليها يومياً لإنجازها.</div>
-        <div className="flex items-center gap-1.5"><AlertTriangle size={13} className="text-red-400" /> <b className="text-white">العادة السيئة:</b> تُحتسب ناجحة تلقائياً ما لم تسجّل انتكاساً بالزر ⚠️.</div>
-        <div className="flex items-center gap-1.5"><Flame size={13} className="text-orange-400" /> <b className="text-white">السلسلة:</b> عدد الأيام المتتالية التي أتممت فيها العادة بدون كسرها.</div>
-      </div>
-
       {/* ─── Grid Table ─── */}
       <div className="glass rounded-3xl border border-white/[0.06] overflow-hidden">
         <div className="overflow-x-auto relative">
           <div className="min-w-[650px] w-full pb-4">
             {/* Header Row */}
-            <div className="flex items-center px-5 py-4 border-b border-white/[0.06] bg-gradient-to-r from-black/30 to-transparent">
-              <div className="w-36 shrink-0 flex items-center justify-between text-xs font-bold text-[#8B9A90] tracking-wider uppercase pl-3 border-l border-white/5">
+            <div className="flex items-center px-5 py-4 border-x border-transparent border-b border-b-white/[0.06] bg-gradient-to-r from-black/30 to-transparent">
+              <div className="w-48 shrink-0 flex items-center justify-between text-xs font-bold text-[#8B9A90] tracking-wider uppercase pl-3 border-l border-white/5">
                 <span>العادة</span>
                 
                 {/* Pagination Controls */}
@@ -326,11 +355,11 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
               </div>
 
               {/* Days */}
-              <div className="flex-1 flex justify-between px-2">
+              <div className="flex-1 grid grid-cols-10 px-2">
                 {days.map((day) => (
                   <div
                     key={day.num}
-                    className={`flex-1 flex flex-col items-center justify-end transition-all duration-200 ${
+                    className={`flex flex-col items-center justify-end transition-all duration-200 ${
                       day.isToday
                         ? 'text-green-400 font-bold'
                         : 'text-[#5E6A63]'
@@ -352,7 +381,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
               <div className="w-24 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
                 🔥 السلسلة
               </div>
-              <div className="w-20 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5 sticky right-0 z-20 bg-[#101411] shadow-[-8px_0_16px_-4px_rgba(0,0,0,0.4)]">
+              <div className="w-[110px] shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
                 إجراءات
               </div>
             </div>
@@ -369,7 +398,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   }`}
                 >
                   {/* Habit Info */}
-                  <div className="w-36 shrink-0 flex items-center gap-2 pl-3 border-l border-white/5">
+                  <div className="w-48 shrink-0 flex items-center gap-2 pl-3 border-l border-white/5">
                     <div
                       className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 shadow-lg transition-transform group-hover:scale-110"
                       style={{
@@ -380,22 +409,22 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                       {habit.icon || "✨"}
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-xs text-white/90 truncate flex items-center gap-1" title={habit.title}>
+                      <span className="font-semibold text-sm text-white/95 whitespace-normal break-words flex items-center gap-1" title={habit.title}>
                         {habit.title}
-                        {habit.habit_type === 'quit' && <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">🚫 سيئة</span>}
+                        {habit.habit_type === 'quit' && <span className="text-[10px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">🚫 سيئة</span>}
                       </span>
                       {habit.habit_type === 'quit' ? (
                         habit.relapsedToday
-                          ? <span className="text-[9px] text-red-400/70">⚠️ انتكاس</span>
-                          : <span className="text-[9px] text-teal-400/70">🛡️ تم التجنب</span>
+                          ? <span className="text-[10px] text-red-400/70 mt-0.5">⚠️ انتكاس</span>
+                          : <span className="text-[10px] text-teal-400/70 mt-0.5">🛡️ تم التجنب</span>
                       ) : isHabitHandledToday(habit) ? (
-                        <span className="text-[9px] text-green-400/70">✓ {habit.frozenToday ? 'مجمّد' : 'تم'}</span>
+                        <span className="text-[10px] text-green-400/70 mt-0.5">✓ {habit.frozenToday ? 'مجمّد' : 'تم'}</span>
                       ) : null}
                     </div>
                   </div>
 
                   {/* Days Grid */}
-                  <div className="flex-1 flex justify-between px-2 items-center">
+                  <div className="flex-1 grid grid-cols-10 px-2 items-center">
                     {days.map((day) => {
                       const isBad = habit.habit_type === 'quit';
                       const isRelapsed = habit.relapses?.has(day.fullDate) || false;
@@ -409,20 +438,31 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
 
 
                       return (
-                        <div key={day.num} className="flex items-center justify-center flex-1 h-8 relative">
+                        <div key={day.num} className="flex items-center justify-center h-8 relative">
                           {!day.isFuture ? (
                             <button
                               onClick={() => {
-                                if (!isCurrentMonth || isBad) return;
-                                onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check");
+                                if (!isCurrentMonth) return;
+                                if (isBad) {
+                                  if (day.isToday) {
+                                    if (isRelapsed) {
+                                      onUndoRelapse?.(habit.id);
+                                    } else {
+                                      setRelapseHabitId(habit.id);
+                                      setRelapseReason("");
+                                    }
+                                  }
+                                } else {
+                                  onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check");
+                                }
                               }}
-                              disabled={!isCurrentMonth || isBad}
+                              disabled={!isCurrentMonth || (isBad && !day.isToday)}
                               className={`w-[26px] h-[26px] rounded-lg transition-all duration-300 flex items-center justify-center relative overflow-hidden ${
                                 isChecked || isRelapsed
                                   ? ''
                                   : day.isToday
                                     ? `bg-white/[0.08] ring-1 ${isBad ? 'ring-red-500/30' : 'ring-green-500/30'} hover:bg-white/[0.12]`
-                                    : 'bg-white/[0.04] hover:bg-white/[0.08]'
+                                    : 'bg-white/[0.08] hover:bg-white/[0.12]'
                               } ${!isCurrentMonth && !isChecked ? 'opacity-30 cursor-default hover:bg-white/[0.04]' : ''} ${!isCurrentMonth && isChecked ? 'cursor-default' : ''}`}
                               style={(isChecked || isRelapsed) ? {
                                 background: `linear-gradient(135deg, ${habitColor}, ${habitColor}cc)`,
@@ -455,7 +495,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                               </AnimatePresence>
                             </button>
                           ) : (
-                            <div className="w-[26px] h-[26px] rounded-lg border border-white/[0.02] bg-white/[0.01] opacity-20" />
+                            <div className="w-[26px] h-[26px] rounded-lg border border-white/[0.05] bg-white/[0.03] opacity-40" />
                           )}
                         </div>
                       );
@@ -479,7 +519,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                         )}
                         {habit.saved_value_per_day ? (
                           <div className="text-[9px] text-green-400/70 text-center leading-tight">
-                            وفّر {(habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)} {habit.saved_unit || ''}
+                            وفّر {Number(((habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)).toFixed(2))} {habit.saved_unit || ''}
                           </div>
                         ) : null}
                       </>
@@ -502,7 +542,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                         )}
                         {habit.saved_value_per_day ? (
                           <div className="text-[9px] text-green-400/70 text-center leading-tight">
-                            حقق {(habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)} {habit.saved_unit || ''}
+                            حقق {Number(((habit.streak?.current_streak || 0) * (habit.saved_value_per_day || 0)).toFixed(2))} {habit.saved_unit || ''}
                           </div>
                         ) : null}
                       </>
@@ -515,7 +555,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   </div>
 
                   {/* Actions — always visible (Phase 4) */}
-                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1 sticky right-0 z-10 bg-[#101411] shadow-[-8px_0_16px_-4px_rgba(0,0,0,0.4)]">
+                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1">
                     {habit.habit_type === 'quit' && isCurrentMonth && onResetStreak ? (
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -605,117 +645,194 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4"
+          className="mt-16 mb-8"
         >
-          {/* Good habits done */}
-          <div className="glass rounded-2xl p-5 border border-green-500/10">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-sm font-medium text-green-400">عادات تمت اليوم</span>
-            </div>
-            <div className="space-y-2">
-              {goodHabits.filter(h => isHabitHandledToday(h)).map(h => (
-                <div key={h.id} className="flex items-center gap-2 text-sm text-white/70">
-                  <span>{h.icon}</span>
-                  <span className="truncate">{h.title}</span>
-                  {h.frozenToday ? (
-                    <Snowflake size={12} className="text-blue-400 mr-auto shrink-0" />
-                  ) : (
-                    <Check size={12} className="text-green-400 mr-auto shrink-0" />
-                  )}
+          <div className="flex flex-col lg:flex-row gap-8 relative">
+            {/* --- Positive Habits Section --- */}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/5 flex items-center justify-center border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]">
+                    <Check size={16} className="text-green-400" />
+                  </div>
+                  العادات الإيجابية
+                </h3>
+                <div className="flex items-center gap-1.5 bg-gradient-to-r from-blue-500/10 to-cyan-500/5 border border-blue-500/20 px-3 py-1.5 rounded-xl shadow-sm">
+                  <Snowflake size={14} className="text-blue-400" />
+                  <span className="text-xs font-bold text-blue-300">
+                    رصيد الإيقاف: {Math.max(0, 3 - freezesUsed)} / 3
+                  </span>
                 </div>
-              ))}
-              {goodHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
-                <div className="text-sm text-white/30 text-center py-2">لم تكمل أي عادة بعد</div>
-              )}
-            </div>
-          </div>
-
-          {/* Good habits not done yet */}
-          <div className="glass rounded-2xl p-5 border border-orange-500/10">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-orange-400" />
-              <span className="text-sm font-medium text-orange-400">لم تتم بعد</span>
-            </div>
-
-            {/* Freeze tracker */}
-            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full mb-3">
-              <Snowflake size={14} className="text-blue-400" />
-              <span className="text-xs font-semibold text-blue-300">
-                رصيد الإيقاف: {Math.max(0, 3 - freezesUsed)} / 3
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {goodHabits.filter(h => !isHabitHandledToday(h)).map(h => (
-                <motion.div
-                  key={h.id}
-                  className="flex items-center gap-2 text-sm text-white/70 cursor-pointer hover:bg-white/5 rounded-lg p-1.5 -m-1.5 transition-colors"
-                  onClick={() => handleCheckInWithJournal(h.id, todayLocal)}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <span>{h.icon}</span>
-                  <span className="truncate">{h.title}</span>
-                  <span className="text-[10px] text-white/30 mr-auto shrink-0">اضغط لإتمامها</span>
-                </motion.div>
-              ))}
-              {goodHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
-                <div className="text-sm text-green-400/60 text-center py-2">🎉 أكملت كل العادات الجيدة!</div>
-              )}
-            </div>
-          </div>
-
-          {/* Quit habits avoided today */}
-          {badHabits.length > 0 && (
-            <div className="glass rounded-2xl p-5 border border-teal-500/10">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-teal-400" />
-                <span className="text-sm font-medium text-teal-400">تم تجنبها اليوم</span>
               </div>
-              <div className="space-y-2">
-                {badHabits.filter(h => isHabitHandledToday(h)).map(h => (
-                  <div key={h.id} className="flex items-center gap-2 text-sm text-white/70">
-                    <span>{h.icon}</span>
-                    <span className="truncate">{h.title}</span>
-                    {h.frozenToday ? (
-                      <Snowflake size={12} className="text-blue-400 mr-auto shrink-0" />
-                    ) : (
-                      <Shield size={12} className="text-teal-400 mr-auto shrink-0" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                {/* Good habits done */}
+                <div className="glass rounded-2xl p-5 border border-green-500/10 hover:border-green-500/20 transition-colors relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-green-500/10" />
+                  <div className="flex items-center justify-between mb-4 relative">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
+                      <span className="text-sm font-bold text-green-400">تمت اليوم</span>
+                    </div>
+                    <span className="text-xs font-bold bg-green-500/10 text-green-400 px-2 py-1 rounded-lg">
+                      {goodHabits.filter(h => isHabitHandledToday(h)).length}
+                    </span>
+                  </div>
+                  <div className="space-y-2.5 relative">
+                    {goodHabits.filter(h => isHabitHandledToday(h)).map(h => (
+                      <motion.div
+                        key={h.id}
+                        className="flex items-center gap-2.5 text-sm text-white/80 cursor-pointer bg-white/[0.02] hover:bg-red-500/10 p-2 rounded-xl border border-white/5 hover:border-red-500/20 transition-colors group/item"
+                        onClick={() => onCheckIn(h.id, todayLocal, "uncheck")}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <span className="drop-shadow-md">{h.icon}</span>
+                        <span className="truncate font-medium">{h.title}</span>
+                        <span className="text-[10px] font-bold text-red-400/50 group-hover/item:text-red-400 mr-auto shrink-0 bg-red-500/10 px-2 py-1 rounded-md transition-colors opacity-0 group-hover/item:opacity-100">تراجع</span>
+                        {h.frozenToday ? (
+                          <Snowflake size={14} className="text-blue-400 shrink-0 group-hover/item:hidden" />
+                        ) : (
+                          <Check size={14} className="text-green-400 shrink-0 group-hover/item:hidden" />
+                        )}
+                      </motion.div>
+                    ))}
+                    {goodHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
+                      <div className="text-sm text-white/30 text-center py-4 bg-white/[0.01] rounded-xl border border-white/5 border-dashed">لم تكمل أي عادة بعد</div>
                     )}
                   </div>
-                ))}
-                {badHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
-                  <div className="text-sm text-white/30 text-center py-2">لم تؤكد التجنب بعد</div>
-                )}
-              </div>
-            </div>
-          )}
+                </div>
 
-          {/* Quit habits not yet avoided */}
-          {badHabits.length > 0 && (
-            <div className="glass rounded-2xl p-5 border border-red-500/10">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-red-400" />
-                <span className="text-sm font-medium text-red-400">لم يتم تجنبها</span>
-              </div>
-              <div className="space-y-2">
-                {badHabits.filter(h => !isHabitHandledToday(h)).map(h => (
-                  <motion.div
-                    key={h.id}
-                    className="flex items-center gap-2 text-sm text-white/70 rounded-lg p-1.5 -m-1.5"
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <span>{h.icon}</span>
-                    <span className="truncate">{h.title}</span>
-                    <span className="text-[10px] text-white/30 mr-auto shrink-0">اضغط لتأكيد</span>
-                  </motion.div>
-                ))}
-                {badHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
-                  <div className="text-sm text-teal-400/60 text-center py-2">✅ تجنبت كل العادات السيئة!</div>
-                )}
+                {/* Good habits not done yet */}
+                <div className="glass rounded-2xl p-5 border border-orange-500/10 hover:border-orange-500/20 transition-colors relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-orange-500/10" />
+                  <div className="flex items-center justify-between mb-4 relative">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.8)]" />
+                      <span className="text-sm font-bold text-orange-400">لم تتم بعد</span>
+                    </div>
+                    <span className="text-xs font-bold bg-orange-500/10 text-orange-400 px-2 py-1 rounded-lg">
+                      {goodHabits.filter(h => !isHabitHandledToday(h)).length}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 relative">
+                    {goodHabits.filter(h => !isHabitHandledToday(h)).map(h => (
+                      <motion.div
+                        key={h.id}
+                        className="flex items-center gap-2.5 text-sm text-white/80 cursor-pointer bg-white/[0.02] hover:bg-orange-500/10 p-2 rounded-xl border border-white/5 hover:border-orange-500/20 transition-colors group/item"
+                        onClick={() => handleCheckInWithJournal(h.id, todayLocal)}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <span className="drop-shadow-md">{h.icon}</span>
+                        <span className="truncate font-medium">{h.title}</span>
+                        <span className="text-[10px] font-bold text-orange-400/50 group-hover/item:text-orange-400 mr-auto shrink-0 bg-orange-500/10 px-2 py-1 rounded-md transition-colors">اضغط للإتمام</span>
+                      </motion.div>
+                    ))}
+                    {goodHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
+                      <div className="text-sm font-bold text-green-400/80 text-center py-4 bg-green-500/5 rounded-xl border border-green-500/10">🎉 أكملت كل العادات الجيدة!</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+
+            {/* --- Visual Divider --- */}
+            {badHabits.length > 0 && (
+              <>
+                {/* Desktop Divider */}
+                <div className="hidden lg:flex flex-col items-center justify-center shrink-0 w-8">
+                  <div className="w-px h-full bg-gradient-to-b from-transparent via-green-500/40 to-transparent shadow-[0_0_12px_rgba(34,197,94,0.4)]"></div>
+                </div>
+                {/* Mobile Divider */}
+                <div className="flex lg:hidden items-center justify-center w-full py-6">
+                  <div className="h-px w-full bg-gradient-to-r from-transparent via-green-500/40 to-transparent shadow-[0_0_12px_rgba(34,197,94,0.4)]"></div>
+                </div>
+              </>
+            )}
+
+            {/* --- Negative Habits Section --- */}
+            {badHabits.length > 0 && (
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/5 flex items-center justify-center border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                      <AlertTriangle size={16} className="text-red-400" />
+                    </div>
+                    العادات السلبية
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                  {/* Quit habits avoided today */}
+                  <div className="glass rounded-2xl p-5 border border-teal-500/10 hover:border-teal-500/20 transition-colors relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-teal-500/10" />
+                    <div className="flex items-center justify-between mb-4 relative">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)]" />
+                        <span className="text-sm font-bold text-teal-400">تم تجنبها اليوم</span>
+                      </div>
+                      <span className="text-xs font-bold bg-teal-500/10 text-teal-400 px-2 py-1 rounded-lg">
+                        {badHabits.filter(h => isHabitHandledToday(h)).length}
+                      </span>
+                    </div>
+                    <div className="space-y-2.5 relative">
+                      {badHabits.filter(h => isHabitHandledToday(h)).map(h => (
+                        <motion.div
+                          key={h.id}
+                          className="flex items-center gap-2.5 text-sm text-white/80 cursor-pointer bg-white/[0.02] hover:bg-red-500/10 p-2 rounded-xl border border-white/5 hover:border-red-500/20 transition-colors group/item"
+                          onClick={() => { setRelapseHabitId(h.id); setRelapseReason(""); }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <span className="drop-shadow-md">{h.icon}</span>
+                          <span className="truncate font-medium">{h.title}</span>
+                          <span className="text-[10px] font-bold text-red-400/50 group-hover/item:text-red-400 mr-auto shrink-0 bg-red-500/10 px-2 py-1 rounded-md transition-colors opacity-0 group-hover/item:opacity-100">سجل انتكاسة</span>
+                          {h.frozenToday ? (
+                            <Snowflake size={14} className="text-blue-400 shrink-0 group-hover/item:hidden" />
+                          ) : (
+                            <Shield size={14} className="text-teal-400 shrink-0 group-hover/item:hidden" />
+                          )}
+                        </motion.div>
+                      ))}
+                      {badHabits.filter(h => isHabitHandledToday(h)).length === 0 && (
+                        <div className="text-sm text-white/30 text-center py-4 bg-white/[0.01] rounded-xl border border-white/5 border-dashed">لم تؤكد التجنب بعد</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quit habits not yet avoided */}
+                  <div className="glass rounded-2xl p-5 border border-red-500/10 hover:border-red-500/20 transition-colors relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-red-500/10" />
+                    <div className="flex items-center justify-between mb-4 relative">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.8)]" />
+                        <span className="text-sm font-bold text-red-400">لم يتم تجنبها</span>
+                      </div>
+                      <span className="text-xs font-bold bg-red-500/10 text-red-400 px-2 py-1 rounded-lg">
+                        {badHabits.filter(h => !isHabitHandledToday(h)).length}
+                      </span>
+                    </div>
+                    <div className="space-y-2.5 relative">
+                      {badHabits.filter(h => !isHabitHandledToday(h)).map(h => (
+                        <motion.div
+                          key={h.id}
+                          className="flex items-center gap-2.5 text-sm text-white/80 cursor-pointer bg-white/[0.02] hover:bg-teal-500/10 p-2 rounded-xl border border-white/5 hover:border-teal-500/20 transition-colors group/item"
+                          onClick={() => onUndoRelapse?.(h.id)}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <span className="drop-shadow-md">{h.icon}</span>
+                          <span className="truncate font-medium">{h.title}</span>
+                          <span className="text-[10px] font-bold text-teal-400/50 group-hover/item:text-teal-400 mr-auto shrink-0 bg-teal-500/10 px-2 py-1 rounded-md transition-colors opacity-0 group-hover/item:opacity-100">تراجع عن الانتكاسة</span>
+                        </motion.div>
+                      ))}
+                      {badHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
+                        <div className="text-sm font-bold text-teal-400/80 text-center py-4 bg-teal-500/5 rounded-xl border border-teal-500/10">✅ تجنبت كل العادات السيئة!</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </motion.div>
       )}
 

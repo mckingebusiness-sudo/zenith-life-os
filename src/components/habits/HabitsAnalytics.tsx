@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { PrintableReport } from "./PrintableReport";
 import { calculateDayProgress } from "@/lib/habitCalculations";
+import { HabitsAIAnalysis } from "./HabitsAIAnalysis";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -25,14 +26,56 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showMoreMonths, setShowMoreMonths] = useState(false);
+  const [showFullMonth, setShowFullMonth] = useState(false);
+
+  const daysInMonth = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    return new Date(year, month + 1, 0).getDate();
+  }, [currentDate]);
+
+  const { ticks: lineChartTicks, maxY: lineChartMaxY } = useMemo(() => {
+    const goodHabitsCount = habits.filter(h => h.habit_type !== 'quit').length;
+    const badHabitsCount = habits.filter(h => h.habit_type === 'quit').length;
+    const rawMax = Math.max(goodHabitsCount, badHabitsCount, 5);
+    
+    let ticksArr: number[] = [];
+    let maxYVal = rawMax;
+    
+    if (rawMax <= 5) {
+      ticksArr = [0, 1, 2, 3, 4, 5];
+      maxYVal = 5;
+    } else if (rawMax <= 11) {
+      ticksArr = [0, 2, 5, 8, 11];
+      maxYVal = 11;
+    } else if (rawMax <= 15) {
+      ticksArr = [0, 3, 6, 9, 12, 15];
+      maxYVal = 15;
+    } else if (rawMax <= 20) {
+      ticksArr = [0, 5, 10, 15, 20];
+      maxYVal = 20;
+    } else if (rawMax <= 25) {
+      ticksArr = [0, 5, 10, 15, 20, 25];
+      maxYVal = 25;
+    } else {
+      const step = Math.ceil(rawMax / 5);
+      ticksArr = [0, step, step * 2, step * 3, step * 4, step * 5];
+      maxYVal = step * 5;
+    }
+    
+    return { ticks: ticksArr, maxY: maxYVal };
+  }, [habits]);
+
+  const barChartTicks = useMemo(() => {
+    if (daysInMonth === 31) return [0, 10, 20, 31];
+    if (daysInMonth === 30) return [0, 10, 20, 30];
+    if (daysInMonth === 29) return [0, 10, 20, 29];
+    return [0, 10, 20, 28];
+  }, [daysInMonth]);
 
   const monthlyData = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const goodHabits = habits.filter(h => h.habit_type !== 'quit');
-    const badHabits = habits.filter(h => h.habit_type === 'quit');
 
     const result = [];
     for (let i = 1; i <= daysInMonth; i++) {
@@ -48,23 +91,40 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       result.push({
         name: `${i}`,
         dateStr,
-        الإنجاز: isFuture ? null : totalSuccess,
-        "عادات جيدة": isFuture ? null : completedGood,
-        "تجنب سيئة": isFuture ? null : avoidedBad,
-        percentage: isFuture ? null : percentage
+        الإنجاز: isFuture ? (showFullMonth ? 0 : null) : totalSuccess,
+        "عادات جيدة": isFuture ? (showFullMonth ? 0 : null) : completedGood,
+        "تجنب سيئة": isFuture ? (showFullMonth ? 0 : null) : avoidedBad,
+        percentage: isFuture ? (showFullMonth ? 0 : null) : percentage
       });
     }
     return result;
-  }, [habits, currentDate]);
+  }, [habits, currentDate, daysInMonth, showFullMonth]);
 
   // Per-habit stats for bar chart
   const habitStats = useMemo(() => {
     const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+    const realNow = new Date();
+    const isCurrentMonth = currentDate.getFullYear() === realNow.getFullYear() && currentDate.getMonth() === realNow.getMonth();
+    const daysToConsider = isCurrentMonth ? realNow.getDate() : daysInMonth;
+
     return habits.map(h => {
       let monthCheckins = 0;
-      h.checkins?.forEach(dateStr => {
-        if (dateStr.startsWith(prefix)) monthCheckins++;
-      });
+      if (h.habit_type === 'quit') {
+        const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
+        for (let i = 1; i <= daysToConsider; i++) {
+          const dateStr = `${prefix}-${String(i).padStart(2, "0")}`;
+          const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+          if (dateObj >= new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate())) {
+            if (!h.relapses?.has(dateStr)) {
+              monthCheckins++;
+            }
+          }
+        }
+      } else {
+        h.checkins?.forEach(dateStr => {
+          if (dateStr.startsWith(prefix)) monthCheckins++;
+        });
+      }
       return {
         name: h.title.length > 12 ? h.title.slice(0, 12) + "…" : h.title,
         icon: h.icon || "✨",
@@ -73,7 +133,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         color: h.color,
       };
     });
-  }, [habits, currentDate]);
+  }, [habits, currentDate, daysInMonth]);
 
   const bestStreak = useMemo(() => {
     return Math.max(...habits.map(h => h.streak?.longest_streak || 0), 0);
@@ -167,16 +227,6 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     },
   ], [bestStreak, perfectDays, totalCheckinsThisMonth, averageCompletion, recoveryUsed, recoveryLoading, habits]);
 
-  const badHabitsStats = useMemo(() => {
-    const badHabits = habits.filter(h => h.habit_type === 'quit');
-    const totalAvoided = monthlyData.reduce((sum: number, d: any) => sum + d["تجنب سيئة"], 0);
-    return [
-      { label: "عادات سيئة متتبعة", value: badHabits.length },
-      { label: "مرات التجنب هذا الشهر", value: totalAvoided },
-      { label: "أكثر عادة سيئة التزاماً", value: badHabits.sort((a,b) => (b.streak?.current_streak || 0) - (a.streak?.current_streak || 0))[0]?.title || "لا يوجد" }
-    ];
-  }, [habits, monthlyData]);
-
   const monthsStats = useMemo(() => {
     const realNow = new Date();
     // Compare based on the selected month 'currentDate'
@@ -217,20 +267,21 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
            name: targetDate.toLocaleDateString('ar-EG', { month: 'long', year: targetDate.getFullYear() !== realNow.getFullYear() ? 'numeric' : undefined }),
            limited: limitToRealCurrentDay,
            limitDay: limit,
-           isRealCurrent: y === realNow.getFullYear() && m === realNow.getMonth()
+           isRealCurrent: y === realNow.getFullYear() && m === realNow.getMonth(),
+           limitedPossible: habits.length * limit
         };
     };
 
     if (isOngoing) {
         list.push(calculateMonth(realNow, true));
-        for(let i=1; i<=11; i++) {
+        for(let i=1; i<=5; i++) {
             const d = new Date(realNow.getFullYear(), realNow.getMonth() - i, 1);
             list.push(calculateMonth(d, true));
         }
     } else {
         list.push(calculateMonth(currentDate, true));
         list.push(calculateMonth(realNow, true));
-        for(let i=1; i<=10; i++) {
+        for(let i=1; i<=4; i++) {
             const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
             list.push(calculateMonth(d, true));
         }
@@ -242,6 +293,15 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   const maxScore = useMemo(() => Math.max(...monthsStats.map(m => m.limitedScore), 1), [monthsStats]);
 
   const generateAIReport = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const limitKey = `analytics_limit_${today}`;
+    const count = parseInt(localStorage.getItem(limitKey) || "0", 10);
+    
+    if (count >= 2) {
+      toast.error("لقد استنفدت الحد المسموح للتحليل اليوم (مرتين). حاول غداً!", { style: { background: '#333', color: '#fff' } });
+      return;
+    }
+
     if (aiLoading) return;
     setAiLoading(true);
     setAiError(false);
@@ -279,12 +339,7 @@ ${ctx}
 تحدث بأسلوب مدرب شخصي داعم، ولا تستخدم JSON أبداً.`;
 
     try {
-      const apiKey = import.meta.env.VITE_MISTRAL_API_KEY;
-      if (!apiKey) {
-        toast.error("مفتاح الذكاء الاصطناعي غير متوفر.");
-        setAiLoading(false);
-        return;
-      }
+      const apiKey = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
 
       const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method: "POST",
@@ -306,7 +361,13 @@ ${ctx}
       
       const data = await res.json();
       
-      setAiInsight(data.choices?.[0]?.message?.content ?? null);
+      let aiText = data.choices?.[0]?.message?.content ?? null;
+      if (typeof aiText === "string") {
+        aiText = aiText.replace(/\*/g, ""); // إزالة جميع النجوم
+      }
+      
+      setAiInsight(aiText);
+      localStorage.setItem(limitKey, String(count + 1));
       toast.success("تم الانتهاء من التحليل!", { style: { background: '#333', color: '#fff' } });
     } catch (err: any) {
       setAiError(true);
@@ -447,50 +508,65 @@ ${ctx}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 + i * 0.05 }}
-            className="glass rounded-2xl p-5 border border-white/[0.06] flex flex-col gap-2 group hover:bg-white/[0.02] transition-all duration-300"
+            whileHover={{ y: -4, scale: 1.01 }}
+            className="glass rounded-3xl p-6 border border-white/[0.06] flex flex-col justify-between min-h-[148px] group hover:bg-white/[0.02] transition-all duration-300 relative overflow-hidden"
           >
-            <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.iconBg} flex items-center justify-center ${stat.iconColor} shrink-0 group-hover:scale-110 transition-transform`}>
+            {/* Glowing background hint */}
+            <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full blur-2xl opacity-10 bg-gradient-to-br ${stat.iconBg} pointer-events-none`} />
+
+            {/* Top row: Icon */}
+            <div className="flex items-center justify-between relative z-10">
+              <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${stat.iconBg} flex items-center justify-center ${stat.iconColor} border border-white/5 shrink-0 group-hover:scale-105 transition-transform`}>
                 {stat.icon}
               </div>
-              <div>
-                <div className="text-[#A7B3AB] text-xs mb-0.5">{stat.label}</div>
-                <div className="text-2xl font-black text-white flex items-baseline gap-1">
-                  {stat.value} <span className="text-sm font-normal text-[#A7B3AB]">{stat.unit}</span>
-                </div>
+            </div>
+
+            {/* Bottom info */}
+            <div className="relative z-10 mt-auto text-right" dir="rtl">
+              <div className="text-[#A7B3AB] text-xs font-bold opacity-60 mb-2">{stat.label}</div>
+              <div className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">
+                {stat.value} <span className="text-sm font-bold text-[#A7B3AB] mr-1">{stat.unit}</span>
               </div>
             </div>
-            <div data-html2canvas-ignore>
-                {(stat as any).extra && (stat as any).extra}
-            </div>
-          </motion.div>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        {badHabitsStats.map((stat: any, i: number) => (
-          <motion.div
-            key={i}
-            className="glass rounded-2xl p-4 border border-white/[0.06] flex items-center justify-between"
-          >
-            <span className="text-white/70 text-sm">{stat.label}</span>
-            <span className="text-white font-bold">{stat.value}</span>
+            {stat.extra && (
+              <div className="relative z-10 mt-3" data-html2canvas-ignore>
+                {stat.extra}
+              </div>
+            )}
           </motion.div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="glass rounded-3xl p-6 border border-white/[0.06]">
-          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-            <TrendingUp size={16} className="text-green-400" />
-            مخطط الإنجاز اليومي
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <TrendingUp size={16} className="text-green-400" />
+              مخطط الإنجاز اليومي
+            </h3>
+            <button
+              onClick={() => setShowFullMonth(!showFullMonth)}
+              className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white rounded-xl border border-white/10 transition font-bold"
+              data-html2canvas-ignore
+            >
+              {showFullMonth ? "عرض حتى اليوم" : "عرض الشهر كاملاً"}
+            </button>
+          </div>
           <div className="h-[250px] w-full" dir="ltr">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                 <XAxis dataKey="name" stroke="rgba(255,255,255,0.25)" fontSize={10} tickMargin={8} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.25)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis
+                  domain={[0, lineChartMaxY]}
+                  ticks={lineChartTicks}
+                  stroke="rgba(255,255,255,0.25)"
+                  fontSize={10}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
                   itemStyle={{ color: '#ffffff' }}
@@ -521,7 +597,15 @@ ${ctx}
                   axisLine={false}
                   tickLine={false}
                 />
-                <YAxis stroke="rgba(255,255,255,0.25)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis
+                  domain={[0, daysInMonth]}
+                  ticks={barChartTicks}
+                  stroke="rgba(255,255,255,0.25)"
+                  fontSize={10}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
                 <Tooltip
                   cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                   contentStyle={{ backgroundColor: '#131815', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
@@ -539,6 +623,9 @@ ${ctx}
           </div>
         </div>
       </div>
+
+      {/* Mood & Best Time Analysis */}
+      <HabitsAIAnalysis habits={habits} monthlyData={monthlyData} />
 
       <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -571,7 +658,7 @@ ${ctx}
                     {mStat.limited && !mStat.isRealCurrent ? <span className="text-xs text-white/40 mr-1">(حتى اليوم {mStat.limitDay})</span> : ""}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className={`text-sm font-bold ${idx === 0 ? 'text-green-400' : 'text-blue-400'}`}>{mStat.limitedScore} إنجاز</span>
+                    <span className={`text-sm font-bold ${idx === 0 ? 'text-green-400' : 'text-blue-400'}`}>{mStat.limitedScore} / {mStat.limitedPossible} إنجاز</span>
                     {mStat.totalScore > mStat.limitedScore && (
                       <span className="text-[10px] text-white/30 hidden sm:inline-block">إجمالي الشهر: {mStat.totalScore}</span>
                     )}
@@ -581,7 +668,7 @@ ${ctx}
                   <motion.div
                     className={`h-full rounded-full bg-gradient-to-r ${idx === 0 ? 'from-green-500 to-emerald-400' : 'from-blue-500 to-cyan-400'}`}
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.min((mStat.limitedScore / maxScore) * 100, 100)}%` }}
+                    animate={{ width: `${Number(Math.min((mStat.limitedScore / maxScore) * 100, 100).toFixed(2))}%` }}
                     transition={{ duration: 1, ease: "easeOut", delay: 0.5 + (idx * 0.1) }}
                   />
                 </div>

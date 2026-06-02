@@ -71,6 +71,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   const { data: habits, error: habitsError } = await supabase
     .from("habits")
     .select("*, streak:habit_streaks(*)")
+    .eq("user_id", authData.session.user.id)
     .or("is_deleted.eq.false,is_deleted.is.null")
     .order("sort_order");
 
@@ -86,6 +87,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   const { data: recentCheckins, error: checkinsError } = await supabase
     .from("habit_checkins")
     .select("habit_id, day_local")
+    .eq("user_id", authData.session.user.id)
     .gte("day_local", startStr)
     .lte("day_local", endStr);
   if (checkinsError) throw checkinsError;
@@ -100,6 +102,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   const { data: recentFreezes, error: freezesError } = await supabase
     .from("habit_freezes")
     .select("habit_id, freeze_day")
+    .eq("user_id", authData.session.user.id)
     .gte("freeze_day", startStr)
     .lte("freeze_day", endStr);
   if (freezesError) throw freezesError;
@@ -115,6 +118,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
   const { data: recentRelapses, error: relapsesError } = await supabase
     .from("habit_relapses")
     .select("habit_id, day_local, reason")
+    .eq("user_id", authData.session.user.id)
     .gte("day_local", startStr)
     .lte("day_local", endStr);
   if (relapsesError) throw relapsesError;
@@ -227,6 +231,7 @@ export function useHabits(currentDate: Date = new Date()) {
       } else {
         const { error } = await supabase.from("habit_checkins").delete().match({
           habit_id: id,
+          user_id: userId,
           day_local: targetDay,
         });
         if (error) throw error;
@@ -258,12 +263,17 @@ export function useHabits(currentDate: Date = new Date()) {
             // Optimistic streak update (will be corrected by onSuccess)
             let newStreakCount = h.streak?.current_streak || 0;
             let newTotal = h.streak?.total_checkins || 0;
-            if (targetDay === today) {
-              if (action === "check" && !h.checkedToday) {
-                newStreakCount += 1;
+            if (action === "check" && !h.checkedToday && targetDay === today) {
+              newStreakCount += 1;
+              newTotal += 1;
+            } else if (action === "uncheck" && h.checkedToday && targetDay === today) {
+              newStreakCount = Math.max(0, newStreakCount - 1);
+              newTotal = Math.max(0, newTotal - 1);
+            } else if (targetDay !== today) {
+              if (action === "check") {
                 newTotal += 1;
-              } else if (action === "uncheck" && h.checkedToday) {
-                newStreakCount = Math.max(0, newStreakCount - 1);
+                if (newStreakCount === 0) newStreakCount = 1;
+              } else {
                 newTotal = Math.max(0, newTotal - 1);
               }
             }
@@ -450,12 +460,63 @@ export function useHabits(currentDate: Date = new Date()) {
     retry: 0,
   });
 
+  const bulkAddHabits = useMutation({
+    mutationFn: async (habits: Partial<Habit>[]) => {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Not logged in");
+      const userId = authData.session.user.id;
+
+      const payloads = habits.map((habit, i) => ({
+        title: habit.title,
+        description: habit.description ?? null,
+        icon: habit.icon ?? "✨",
+        color: habit.color ?? "green",
+        cadence: habit.cadence ?? "daily",
+        target_per_period: habit.target_per_period ?? 1,
+        active_weekdays: habit.active_weekdays ?? [0, 1, 2, 3, 4, 5, 6],
+        grace_days: habit.grace_days ?? 0,
+        is_private: habit.is_private ?? false,
+        sort_order: habit.sort_order ?? i,
+        user_id: userId,
+        is_deleted: false,
+        habit_type: (habit as any).habit_type || 'good',
+        saved_value_per_day: (habit as any).saved_value_per_day ?? null,
+        saved_unit: (habit as any).saved_unit ?? null,
+        is_paused: habit.is_paused ?? false,
+        pause_until: habit.pause_until ?? null,
+        tracking_type: habit.tracking_type ?? "checkbox",
+        target_value: habit.target_value ?? null,
+        target_unit: habit.target_unit ?? null,
+      }));
+
+      const { data, error } = await supabase
+        .from("habits")
+        .insert(payloads)
+        .select();
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (err: any) => {
+      console.error("❌ bulkAddHabits FAILED:", err);
+      toast.error("فشل حفظ العادات — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
+    },
+    retry: 0,
+  });
+
   const updateHabit = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Habit> }) => {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Not logged in");
+
       const { data, error } = await supabase
         .from("habits")
         .update(updates)
         .eq("id", id)
+        .eq("user_id", authData.session.user.id)
         .select()
         .single();
         
@@ -498,11 +559,15 @@ export function useHabits(currentDate: Date = new Date()) {
 
   const deleteHabit = useMutation({
     mutationFn: async (id: string) => {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Not logged in");
+
       // Soft delete
       const { error } = await supabase
         .from("habits")
         .update({ is_deleted: true })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", authData.session.user.id);
       if (error) throw error;
     },
     onMutate: async (id) => {
@@ -524,10 +589,14 @@ export function useHabits(currentDate: Date = new Date()) {
 
   const undeleteHabit = useMutation({
     mutationFn: async (id: string) => {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Not logged in");
+
       const { error } = await supabase
         .from("habits")
         .update({ is_deleted: false })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", authData.session.user.id);
       if (error) throw error;
     },
     onMutate: async (id) => {
@@ -623,12 +692,34 @@ export function useHabits(currentDate: Date = new Date()) {
           const newRelapses = new Set(h.relapses);
           newRelapses.delete(today);
           const newRelapseLogs = (h.relapseLogs || []).filter(l => l.date !== today);
+
+          // Re-calculate streak optimistically
+          const relapseDates = Array.from(newRelapses).sort();
+          let avoidedStreak = 0;
+          if (relapseDates.length === 0) {
+            const createdAt = h.created_at ? new Date(h.created_at) : new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1);
+            const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
+            const todayDate = new Date(today);
+            const createdDate = new Date(createdDay);
+            avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)));
+          } else {
+            const lastRelapse = relapseDates[relapseDates.length - 1];
+            const lastRelapseDate = new Date(lastRelapse);
+            const todayDate = new Date(today);
+            avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - lastRelapseDate.getTime()) / (1000 * 60 * 60 * 24)));
+          }
+
           return {
             ...h,
             relapses: newRelapses,
             relapseLogs: newRelapseLogs,
             relapsedToday: false,
             avoidedToday: true,
+            streak: {
+              ...h.streak!,
+              current_streak: avoidedStreak,
+              total_checkins: newRelapses.size
+            }
           };
         }
         return h;
@@ -648,6 +739,7 @@ export function useHabits(currentDate: Date = new Date()) {
     addHabit: (habit: Partial<Habit>) => addHabit.mutate(habit),
     // Async version for callers that need to await completion (e.g. modal)
     addHabitAsync: (habit: Partial<Habit>) => addHabit.mutateAsync(habit),
+    bulkAddHabits: (habits: Partial<Habit>[]) => bulkAddHabits.mutateAsync(habits),
     updateHabit: (id: string, updates: Partial<Habit>) => updateHabit.mutate({ id, updates }),
     updateHabitAsync: (id: string, updates: Partial<Habit>) => updateHabit.mutateAsync({ id, updates }),
     deleteHabit: (id: string) => deleteHabit.mutateAsync(id),
