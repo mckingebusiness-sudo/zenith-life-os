@@ -304,9 +304,11 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     setAiLoading(true);
     setAiError(false);
 
+    let timeoutId: NodeJS.Timeout;
+
     try {
       // Force loading state off after 70 seconds no matter what
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setAiLoading(false);
       }, 70000);
 
@@ -416,6 +418,7 @@ ${habitDetailsStr}
       console.error("AI report error:", err);
       toast.error("فشل الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.", { style: { background: '#333', color: '#fff' } });
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       setAiLoading(false);
     }
   };

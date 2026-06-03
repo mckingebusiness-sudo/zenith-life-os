@@ -416,7 +416,9 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                       {habit.habit_type === 'quit' ? (
                         habit.relapsedToday
                           ? <span className="text-[10px] text-red-400/70 mt-0.5">⚠️ انتكاس</span>
-                          : <span className="text-[10px] text-teal-400/70 mt-0.5">🛡️ تم التجنب</span>
+                          : isHabitHandledToday(habit)
+                            ? <span className="text-[10px] text-teal-400/70 mt-0.5">🛡️ تم التجنب</span>
+                            : <span className="text-[10px] text-orange-400/70 mt-0.5">⏳ بانتظار التأكيد</span>
                       ) : isHabitHandledToday(habit) ? (
                         <span className="text-[10px] text-green-400/70 mt-0.5">✓ {habit.frozenToday ? 'مجمّد' : 'تم'}</span>
                       ) : null}

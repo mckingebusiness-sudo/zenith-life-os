@@ -163,7 +163,8 @@ function HabitsPage() {
       }));
 
       await supabase.from("habits").insert(habitsToInsert);
-      qc.invalidateQueries({ queryKey: ["habits"] });
+      const monthStr = new Intl.DateTimeFormat("en-CA").format(currentDate).slice(0, 7);
+      qc.invalidateQueries({ queryKey: ["habits", monthStr] });
     } catch (err) {
       console.error(err);
       toast.error("حدث خطأ في إضافة العادات");
@@ -270,6 +271,15 @@ function HabitsPage() {
                 </button>
               </div>
 
+              <motion.button
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setIsBlueprintsOpen(true)}
+                className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white/5 hover:bg-white/10 text-white rounded-2xl border border-white/10 transition-all font-bold"
+              >
+                <Sparkles size={18} className="text-yellow-400" />
+                <span className="hidden sm:inline">قوالب جاهزة</span>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.98 }}

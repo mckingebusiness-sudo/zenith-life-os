@@ -197,9 +197,12 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
       }
 
       let currentStreak = calculatedCurrentStreak;
-      // If the streak didn't break in our fetched 6-month window, the DB might know about a longer streak.
-      if (calculatedCurrentStreak === handledDates.length && dbStreak.current_streak > calculatedCurrentStreak) {
-         currentStreak = dbStreak.current_streak + habitFreezes.size; 
+      // If the entire fetched window is one unbroken streak, the real streak may extend
+      // further back than our 6-month fetch. Take the max of client (includes freezes as
+      // streak-days) and DB (checkins-only but may cover a longer history).
+      // Old formula added ALL habitFreezes.size to DB streak → double-counted freeze days.
+      if (calculatedCurrentStreak === handledDates.length && handledDates.length > 0) {
+         currentStreak = Math.max(calculatedCurrentStreak, dbStreak.current_streak || 0);
       }
 
       dbStreak = {
