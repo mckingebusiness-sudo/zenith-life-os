@@ -225,7 +225,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
             const todayDate = new Date(today);
             const createdDate = new Date(createdDay);
             const diffDays = Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
-            avoidedStreak = diffDays + 1;
+            avoidedStreak = diffDays;
           }
         }
       } else {
