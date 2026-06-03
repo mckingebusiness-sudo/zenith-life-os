@@ -110,9 +110,10 @@ function HabitsPage() {
   // Awaits the actual DB save so the modal loading state is accurate
   const handleSaveHabit = async (habitData: Partial<Habit>): Promise<void> => {
     if (editingHabit) {
-      await updateHabitAsync(editingHabit.id, habitData);
+      // Fire-and-forget: optimistic update happens in onMutate, modal closes immediately
+      updateHabit(editingHabit.id, habitData);
     } else {
-      await addHabitAsync(habitData);
+      addHabit(habitData);
     }
   };
 

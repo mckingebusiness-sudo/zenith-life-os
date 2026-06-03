@@ -42,20 +42,9 @@ export function isQuitHabitHandled(habit: HabitWithStreak, dateStr: string): boo
   if (habit.freezes?.has(dateStr)) return true;  // frozen = handled
   if (habit.checkins?.has(dateStr)) return true; // explicit success
 
-  if (habit.created_at) {
-    const created = new Date(habit.created_at);
-    // Use proper timezone formatting to avoid UTC vs Local day shift issues
-    const createdStr = new Intl.DateTimeFormat("en-CA").format(created);
-    if (dateStr < createdStr) return false;      // Habit didn't exist yet
-  }
-
-  // Midnight effect fix: Do not auto-succeed for the current day
-  const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
-  if (dateStr === todayStr) {
-    return false; // Must be explicitly checked today
-  }
-
-  return !habit.relapses?.has(dateStr);           // past day without relapse = handled
+  // No explicit check-in and no freeze = NOT handled
+  // We do NOT auto-succeed past days — the user must confirm avoidance.
+  return false;
 }
 
 /** Check if ANY habit is handled on a specific day */
@@ -69,21 +58,8 @@ export function isHabitSuccessOnDay(habit: HabitWithStreak, dateStr: string): bo
   if (habit.freezes?.has(dateStr)) return false;  // frozen is not "success", it's excused
   
   if (habit.habit_type === 'quit') {
-    if (habit.checkins?.has(dateStr)) return true; // explicitly checked
-    
-    if (habit.created_at) {
-      const created = new Date(habit.created_at);
-      const createdStr = new Intl.DateTimeFormat("en-CA").format(created);
-      if (dateStr < createdStr) return false;      // Habit didn't exist yet
-    }
-    
-    // Do not auto-succeed for the current day
-    const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
-    if (dateStr === todayStr) {
-      return false; // Requires explicit input
-    }
-    
-    return !habit.relapses?.has(dateStr);
+    // Quit habits require explicit check-in to count as success
+    return !!habit.checkins?.has(dateStr);
   }
   
   return !!habit.checkins?.has(dateStr);
@@ -165,8 +141,15 @@ export function calculateDayProgress(
     return { completedGood: 0, avoidedBad: 0, totalSuccess: 0, totalItems: habits.length, percentage: 0 };
   }
 
-  const goodHabits = habits.filter(h => h.habit_type !== 'quit');
-  const badHabits = habits.filter(h => h.habit_type === 'quit');
+  // Filter habits to only those that existed on the given date
+  const habitsOnDate = habits.filter(h => {
+    if (!h.created_at) return true; // no created_at → assume always existed
+    const createdStr = new Intl.DateTimeFormat("en-CA").format(new Date(h.created_at));
+    return dateStr >= createdStr;
+  });
+
+  const goodHabits = habitsOnDate.filter(h => h.habit_type !== 'quit');
+  const badHabits = habitsOnDate.filter(h => h.habit_type === 'quit');
 
   let completedGood = 0;
   goodHabits.forEach(h => {
@@ -179,7 +162,7 @@ export function calculateDayProgress(
   });
 
   const totalSuccess = completedGood + avoidedBad;
-  const totalItems = habits.length;
+  const totalItems = habitsOnDate.length;
   const percentage = totalItems > 0 ? Math.round((totalSuccess / totalItems) * 100) : 0;
 
   return { completedGood, avoidedBad, totalSuccess, totalItems, percentage };
