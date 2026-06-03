@@ -271,7 +271,7 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
 
 
 
-// ─── Streak recalculation in DB ───────────────────────────────────────────────
+// ─── Streak recalculation in DB ───────────────────────────────────────
 // Streaks are now automatically updated via PostgreSQL triggers in Supabase
 // (See streak_trigger.sql artifact)
 
@@ -399,13 +399,15 @@ export function useHabits(currentDate: Date = new Date()) {
       });
     },
     onError: (err, _vars, ctx) => {
-      console.error("❌ addHabit FAILED:", err);
-      toast.error(`خطأ في الإضافة: ${err?.message || 'حدث خطأ غير معروف'}`);
-      if (ctx?.previousHabits) qc.setQueryData(queryKey, ctx.previousHabits);
+      console.error("❌ checkIn FAILED:", err);
+      toast.error(`خطأ في تسجيل العادة: ${err?.message || 'حدث خطأ غير معروف'}`);
+      // ✅ FIX: rollback key mismatch — onMutate returns { prev }, not { previousHabits }
+      if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
-    // ✅ FIXED: Only invalidate the current month, not all months, and return promise
+    // ✅ FIX: targeted, non-blocking invalidation so the mutation settles immediately.
+    // Returning the promise kept the mutation pending until the refetch → infinite loading.
     onSettled: () => {
-      return qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -536,10 +538,11 @@ export function useHabits(currentDate: Date = new Date()) {
       }
       toast.error("فشل حفظ العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
-    // ✅ FIX: Only invalidate current month's query, not ALL queries, and return promise
-    // Invalidating KEY (all months) causes race conditions and infinite loading
+    // ✅ FIX: targeted + non-blocking invalidation. Do NOT return the promise — returning it
+    // keeps addHabit.mutateAsync pending until the background refetch settles, which freezes
+    // the modal in an infinite loading spinner. onSuccess already wrote the real row to cache.
     onSettled: () => {
-      return qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -582,7 +585,9 @@ export function useHabits(currentDate: Date = new Date()) {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      // ✅ FIX: targeted invalidation of the current month only — invalidating KEY (all months)
+      // forced full refetches that could wipe unsynced optimistic data.
+      void qc.invalidateQueries({ queryKey });
     },
     onError: (err: any) => {
       console.error("❌ bulkAddHabits FAILED:", err);
@@ -635,9 +640,10 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
       toast.error("فشل تعديل العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
-    // ✅ FIX: Only invalidate current month's query, not ALL queries, and return promise
+    // ✅ FIX: targeted + non-blocking invalidation so updateHabit.mutateAsync settles
+    // immediately (returning the promise froze edits — e.g. color change — in infinite loading).
     onSettled: () => {
-      return qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -667,7 +673,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      return qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -695,7 +701,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      return qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -735,7 +741,7 @@ export function useHabits(currentDate: Date = new Date()) {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey }),
+    onSettled: () => { void qc.invalidateQueries({ queryKey }); },
   });
 
   const resetStreak = async (habitId: string, reason: string) => {
@@ -755,7 +761,7 @@ export function useHabits(currentDate: Date = new Date()) {
     qc.invalidateQueries({ queryKey });
   };
 
-  // ─── Undo Today's Relapse ────────────────────────────────────────────────────
+  // ─── Undo Today's Relapse ───────────────────────────────────────────
   const undoRelapse = async (habitId: string) => {
     const { data: authData } = await supabase.auth.getSession();
     if (!authData.session) throw new Error("Not logged in");
