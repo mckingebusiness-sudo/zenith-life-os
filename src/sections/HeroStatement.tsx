@@ -1,26 +1,46 @@
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { Play, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useMemo } from "react";
+import { Play, Sparkles, ChevronDown, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDirection } from "@/stores/useDirection";
+import { useHabits } from "@/hooks/useHabits";
+import { calculateLifeScore } from "@/lib/habitAnalyticsEngine";
 
 export default function HeroStatement() {
   const [score, setScore] = useState(0);
+  const [showMath, setShowMath] = useState(false);
   const { t } = useTranslation();
   const { dir } = useDirection();
+  const { habits } = useHabits();
+
+  const lifeMetrics = useMemo(() => calculateLifeScore(habits), [habits]);
 
   useEffect(() => {
     let raf = 0;
     const start = performance.now();
+    const target = lifeMetrics.score || 0;
     const tick = (t: number) => {
       const p = Math.min((t - start) / 1200, 1);
       const eased = 1 - Math.pow(1 - p, 3);
-      setScore(Math.round(83 * eased));
+      setScore(Math.round(target * eased));
       if (p < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [lifeMetrics.score]);
+
+  let headline = "مستواك مستقر، استمر";
+  let subHeadline = "حافظ على أدائك وتقدم خطوة إضافية كل يوم.";
+  if (lifeMetrics.score >= 80) {
+    headline = "أنت في أفضل أيامك";
+    subHeadline = "أداؤك استثنائي! استمر في دفع حدودك نحو القمة.";
+  } else if (lifeMetrics.score < 40) {
+    headline = "اليوم يحتاج إنقاذ";
+    subHeadline = "بداية بطيئة لا تعني نهاية سيئة. قم بإنقاذ يومك الآن.";
+  } else if (lifeMetrics.safetyScore < 50) {
+    headline = "العادات السيئة في خطر";
+    subHeadline = "احذر! أنت على وشك الانتكاس في عاداتك السلبية.";
+  }
 
   return (
     <section className="relative grid grid-cols-1 md:grid-cols-[420px_1fr] gap-12 items-center min-h-[440px] py-8">
@@ -28,30 +48,68 @@ export default function HeroStatement() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, delay: 0.4 }}
-        className={`relative flex items-center justify-center ${dir === 'rtl' ? 'md:order-last' : ''}`}
+        className={`relative flex flex-col items-center justify-center ${dir === 'rtl' ? 'md:order-last' : ''}`}
       >
-        <LifeScoreRings value={83} />
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="text-[96px] font-extrabold leading-none tabular text-grad-green">
-            {score}
+        <div className="relative cursor-pointer" onClick={() => setShowMath(!showMath)}>
+          <LifeScoreRings value={score} daily={lifeMetrics.dailyProgress} strength={lifeMetrics.strengthAverage} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="text-[96px] font-extrabold leading-none tabular text-grad-green">
+              {score}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-1 flex items-center gap-1">
+              {t('hero.lifeScore')} <ChevronDown size={12} className={`transition-transform ${showMath ? 'rotate-180' : ''}`} />
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.6 }}
+              className="mt-3 px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1"
+              style={{
+                background: "rgba(34,197,94,0.12)",
+                border: "1px solid rgba(34,197,94,0.3)",
+                color: "#4ADE80",
+              }}
+            >
+              {t('hero.increase')}
+            </motion.div>
           </div>
-          <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground mt-1">
-            {t('hero.lifeScore')}
-          </div>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.6 }}
-            className="mt-3 px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1"
-            style={{
-              background: "rgba(34,197,94,0.12)",
-              border: "1px solid rgba(34,197,94,0.3)",
-              color: "#4ADE80",
-            }}
-          >
-            {t('hero.increase')}
-          </motion.div>
         </div>
+
+        <AnimatePresence>
+          {showMath && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, y: -10 }}
+              animate={{ opacity: 1, height: "auto", y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -10 }}
+              className="mt-6 w-full max-w-sm overflow-hidden"
+            >
+              <div className="glass p-4 rounded-2xl border border-white/10 shadow-lg text-sm">
+                <div className="flex items-center gap-2 mb-3 text-white/80 font-bold border-b border-white/10 pb-2">
+                  <Info size={16} className="text-blue-400" />
+                  كيف يتم حساب هذا الرقم؟
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">إنجاز اليوم (50%)</span>
+                    <span className="text-green-400 font-bold">{lifeMetrics.dailyProgress}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">متوسط القوة (25%)</span>
+                    <span className="text-blue-400 font-bold">{lifeMetrics.strengthAverage}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">أمان العادات السيئة (15%)</span>
+                    <span className="text-orange-400 font-bold">{lifeMetrics.safetyScore}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">المسار الشهري (10%)</span>
+                    <span className="text-purple-400 font-bold">{lifeMetrics.trendScore}%</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <div className="space-y-6">
@@ -72,9 +130,9 @@ export default function HeroStatement() {
           className="text-[56px] font-extrabold leading-[1.05] tracking-tight text-foreground"
           style={{ letterSpacing: "-0.03em" }}
         >
-          {t('hero.bestDays').replace(t('hero.bestDaysHighlight'), '')}
-          <span className="text-grad-green">{t('hero.bestDaysHighlight')}</span>
-          {t('hero.bestDays').endsWith('.') ? '.' : ''}
+          {headline.split(' ').map((word, i, arr) => (
+            i === arr.length - 1 ? <span key={i} className="text-grad-green"> {word}</span> : <span key={i}> {word}</span>
+          ))}
         </motion.h1>
 
         <motion.p
@@ -83,7 +141,7 @@ export default function HeroStatement() {
           transition={{ delay: 0.4 }}
           className="text-[17px] leading-[1.7] text-muted-foreground max-w-[540px]"
         >
-          {t('hero.productivity')}
+          {subHeadline}
         </motion.p>
 
         <motion.div
@@ -139,7 +197,7 @@ function Pill({ dot, label }: { dot: string; label: string }) {
   );
 }
 
-function LifeScoreRings({ value }: { value: number }) {
+function LifeScoreRings({ value, daily = 72, strength = 60 }: { value: number; daily?: number; strength?: number }) {
   const arc = (r: number, pct: number, color: string, width = 6) => {
     const c = 2 * Math.PI * r;
     return (
@@ -171,9 +229,9 @@ function LifeScoreRings({ value }: { value: number }) {
         {arc(150, value, "url(#outerGrad)", 6)}
       </g>
       <circle cx="180" cy="180" r="125" stroke="var(--border)" strokeWidth="4" fill="none" />
-      {arc(125, 72, "#22C55E", 4)}
+      {arc(125, daily, "#22C55E", 4)}
       <circle cx="180" cy="180" r="105" stroke="var(--border)" strokeWidth="3" fill="none" />
-      {arc(105, 60, "#A7C957", 3)}
+      {arc(105, strength, "#A7C957", 3)}
     </svg>
   );
 }

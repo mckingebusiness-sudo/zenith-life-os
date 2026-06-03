@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { HabitWithStreak } from "@/hooks/useHabits";
 import { getPlantState } from "./plantConfig";
 import { calculateTodayProgress, isHabitHandledToday } from "@/lib/habitCalculations";
+import { calculateHabitStrength } from "@/lib/habitAnalyticsEngine";
 import HabitPlant from "./HabitPlant";
 import { Check, Sparkles, Moon, Sun, ChevronDown, Flame, Leaf, Trophy, BookOpen, Snowflake } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -14,12 +15,12 @@ interface HabitsGardenLargeProps {
 }
 
 const PLANT_STAGES = [
-  { range: "0–2 يوم", name: "بذرة", emoji: "🌱", desc: "بداية الرحلة — البذرة تنتظر الاهتمام" },
-  { range: "3–6 أيام", name: "شتلة", emoji: "🌿", desc: "الجذور تمتد — الالتزام يبدأ يتشكل" },
-  { range: "7–20 يوم", name: "نبتة", emoji: "🌾", desc: "النمو الحقيقي — عادة راسخة تتشكل" },
-  { range: "21–59 يوم", name: "شجيرة", emoji: "🌳", desc: "قوة وثبات — أنت تتغير فعلاً" },
-  { range: "60–149 يوم", name: "شجرة", emoji: "🌲", desc: "الثمار تبدأ — عادة متأصلة عميقاً" },
-  { range: "150+ يوم", name: "غابة ملكية", emoji: "🏕️", desc: "أسطورة! هذه العادة جزء من هويتك" },
+  { range: "0-19%", name: "بذرة", emoji: "🌱", desc: "بداية الرحلة — تحتاج لالتزام مبدئي" },
+  { range: "20-39%", name: "شتلة", emoji: "🌿", desc: "قوة مبدئية — الالتزام يبدأ يتشكل" },
+  { range: "40-59%", name: "نبتة", emoji: "🌾", desc: "النمو الحقيقي — صحة العادة تتحسن" },
+  { range: "60-79%", name: "شجيرة", emoji: "🌳", desc: "قوة وثبات — عادة صحية ومستقرة" },
+  { range: "80-89%", name: "شجرة", emoji: "🌲", desc: "مناعة قوية — تعافت من الزلات السابقة" },
+  { range: "90-100%", name: "غابة ملكية", emoji: "🏕️", desc: "أسطورة! صحة مثالية ومناعة كاملة ضد الانتكاس" },
 ];
 
 export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }: HabitsGardenLargeProps) {
@@ -45,13 +46,17 @@ export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }
     [activeHabits]
   );
   const bestStreak = Math.max(...activeHabits.map(h => h.streak?.longest_streak || 0), 0);
-  const totalCheckins = activeHabits.reduce((a, h) => a + (h.habit_type === 'quit' ? 0 : (h.streak?.total_checkins || 0)), 0);
+  const totalCheckins = activeHabits.reduce((a, h) => a + (h.streak?.total_checkins || 0), 0);
 
   const toggle = (habit: HabitWithStreak, isHandled: boolean, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (habit.frozenToday) return;
     if (habit.habit_type === "quit") {
-      onToggleRelapse?.(habit.id, habit.relapsedToday || false);
+      if (habit.relapsedToday) {
+        onToggleRelapse?.(habit.id, true);
+      } else {
+        onCheckIn(habit.id, undefined, isHandled ? "uncheck" : "check");
+      }
     } else {
       onCheckIn(habit.id, undefined, isHandled ? "uncheck" : "check");
     }
@@ -164,18 +169,26 @@ export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }
       {/* Grid Container */}
       <div className="relative w-full p-8 min-h-[400px]">
         {activeHabits.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-muted-foreground py-20 relative z-10">
-            <Leaf size={64} className="mb-4 opacity-40 drop-shadow-xl" />
-            <p className="text-xl font-bold">لا توجد عادات نشطة حالياً</p>
+          <div className="flex flex-col items-center justify-center py-20 relative z-10 text-center">
+            <div className="w-24 h-24 mb-6 relative">
+              <div className="absolute inset-0 bg-green-500/10 rounded-full animate-pulse blur-xl" />
+              <div className="absolute inset-0 bg-white/5 border border-white/10 rounded-3xl rotate-3 flex items-center justify-center shadow-2xl backdrop-blur-sm">
+                <Leaf size={40} className="text-green-400/60 drop-shadow-lg -rotate-6" />
+              </div>
+            </div>
+            <h3 className="text-2xl font-black text-white mb-3">حديقتك تنتظر البذور الأولى</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+              كل عادة عظيمة تبدأ بقرار صغير. أضف عادتك الأولى الآن لتبدأ في زراعة حديقة إنجازاتك اليومية، وراقب نموها مع كل يوم من الالتزام.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 max-w-7xl mx-auto relative z-10">
             {activeHabits.map((habit, i) => {
+              const strength = calculateHabitStrength(habit);
               const state = getPlantState(
+                strength,
                 habit.streak?.current_streak || 0,
-                habit.streak?.longest_streak || 0,
-                habit.streak?.total_checkins || 0,
-                habit.cadence
+                habit.streak?.total_checkins || 0
               );
               const isHandled = isHabitHandledToday(habit);
               const isQuit = habit.habit_type === 'quit';
@@ -198,7 +211,7 @@ export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }
                   tabIndex={0}
                   role="button"
                 >
-                  <div className="relative transform scale-125 my-4">
+                  <div className="relative my-2 flex justify-center items-center">
                     <HabitPlant
                       level={state.visualLevel}
                       isDormant={state.isDormant}
@@ -252,6 +265,8 @@ export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }
                     className={`relative mt-2 w-7 h-7 rounded-full border-2 flex items-center justify-center transition shadow-md ${
                       habit.frozenToday
                         ? "bg-blue-500 border-blue-400 text-white shadow-[0_0_15px_rgba(59,130,246,0.6)]"
+                        : habit.relapsedToday
+                        ? "bg-red-500 border-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]"
                         : isHandled
                         ? "bg-primary border-primary shadow-[0_0_15px_rgba(34,197,94,0.6)] text-primary-foreground"
                         : "border-primary/30 hover:bg-primary/10 hover:border-primary/60 text-muted-foreground hover:text-foreground"
@@ -261,6 +276,10 @@ export default function HabitsGardenLarge({ habits, onCheckIn, onToggleRelapse }
                       {habit.frozenToday ? (
                         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
                           <Snowflake size={13} strokeWidth={2.5} />
+                        </motion.span>
+                      ) : habit.relapsedToday ? (
+                        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                          <Flame size={13} strokeWidth={2.5} />
                         </motion.span>
                       ) : isHandled ? (
                         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>

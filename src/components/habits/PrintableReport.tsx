@@ -1,17 +1,19 @@
 import { HabitWithStreak } from "@/hooks/useHabits";
 import { format, subDays } from "date-fns";
 import { ar } from "date-fns/locale";
-import { calculateDayProgress } from "@/lib/habitCalculations";
-import { useMemo } from "react";
+import { calculateDayProgress, isHabitHandledOnDay } from "@/lib/habitCalculations";
+import { useMemo, useId } from "react";
+import type { HabitReportSnapshot } from "@/lib/habitAnalyticsEngine";
 
 type Props = {
   habits: HabitWithStreak[];
   currentDate: Date;
   monthsStats: { name: string; limitedScore: number; limitDay: number; isRealCurrent: boolean; totalScore?: number }[];
+  reportSnapshot: HabitReportSnapshot;
 };
 
 // SVG Sparkline Generator
-function Sparkline({ data, width, height, color, fill = false }: { data: number[], width: number, height: number, color: string, fill?: boolean }) {
+function Sparkline({ data, width, height, color, fill = false, idHint = "sparkline" }: { data: number[], width: number, height: number, color: string, fill?: boolean, idHint?: string }) {
   if (!data || data.length === 0) return null;
   const max = Math.max(...data, 1);
   const stepX = width / Math.max(data.length - 1, 1);
@@ -28,7 +30,7 @@ function Sparkline({ data, width, height, color, fill = false }: { data: number[
     return `L ${x},${y}`;
   }).join(' ') + ` L ${width},${height} Z`;
 
-  const gradId = `grad-${color.replace('#', '')}-${Math.random().toString(36).substr(2, 5)}`;
+  const gradId = `grad-${idHint}-${color.replace('#', '')}`;
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
@@ -50,12 +52,13 @@ function Sparkline({ data, width, height, color, fill = false }: { data: number[
   );
 }
 
-export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
+export function PrintableReport({ habits, currentDate, monthsStats, reportSnapshot }: Props) {
   const now = new Date();
 
   const reportData = useMemo(() => {
-    const goodHabits = habits.filter(h => (h as any).habit_type !== 'quit');
-    const quitHabits = habits.filter(h => (h as any).habit_type === 'quit');
+    const safeHabits = habits || [];
+    const goodHabits = safeHabits.filter(h => (h as any).habit_type !== 'quit');
+    const quitHabits = safeHabits.filter(h => (h as any).habit_type === 'quit');
 
     const monthName = format(currentDate, 'MMMM yyyy', { locale: ar });
     const year = currentDate.getFullYear();
@@ -64,43 +67,41 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
     const isOngoing = year === new Date().getFullYear() && month === new Date().getMonth();
     const todayNum = isOngoing ? new Date().getDate() : daysInMonth;
 
-    let totalGoodCheckins = 0;
-    let totalQuitAvoided = 0;
+    let totalGood = 0;
+    let totalQuit = 0;
     const dailyScores: number[] = [];
 
-    for (let i = 1; i <= daysInMonth; i++) {
-      const mm = String(month + 1).padStart(2, "0");
+    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    for (let i = 1; i <= todayNum; i++) {
       const dd = String(i).padStart(2, "0");
-      const dateStr = `${year}-${mm}-${dd}`;
-      const isFuture = new Date(year, month, i) > new Date(new Date().setHours(23, 59, 59, 999));
-      const { completedGood, avoidedBad, totalSuccess } = calculateDayProgress(habits, dateStr, isFuture);
-      
-      if (!isFuture) {
-        totalGoodCheckins += completedGood;
-        totalQuitAvoided += avoidedBad;
-        dailyScores.push(totalSuccess);
-      }
+      const dateStr = `${prefix}-${dd}`;
+      const { completedGood, avoidedBad, totalSuccess } = calculateDayProgress(safeHabits, dateStr, false);
+      totalGood += completedGood;
+      totalQuit += avoidedBad;
+      dailyScores.push(totalSuccess);
     }
 
-    const bestStreak = Math.max(...habits.map(h => h.streak?.current_streak || 0), 0);
-    const longestEver = Math.max(...habits.map(h => h.streak?.longest_streak || 0), 0);
-    const averageDay = goodHabits.length > 0 ? (totalGoodCheckins / todayNum).toFixed(1) : "0.0";
-    const overallSuccessRate = ((totalGoodCheckins / (goodHabits.length * todayNum || 1)) * 100).toFixed(1);
+    const longestEver = Math.max(...safeHabits.map(h => h.streak?.longest_streak || 0), 0);
+    const averageDay = goodHabits.length > 0 ? (totalGood / todayNum).toFixed(1) : "0.0";
+    const overallSuccessRate = reportSnapshot.monthStats.averagePercentage.toFixed(1);
 
-    // Per-habit month checkins & sparkline data (last 10 days of the month)
-    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     const goodHabitsWithStats = goodHabits.map(h => {
-      let monthCheckins = 0;
       const recentData: number[] = [];
+      const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
+      const createdAtZero = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+
       for (let i = Math.max(1, todayNum - 9); i <= todayNum; i++) {
         const dd = String(i).padStart(2, "0");
         const dateStr = `${prefix}-${dd}`;
-        const done = h.checkins?.has(dateStr) ? 1 : 0;
+        const dateObj = new Date(year, month, i);
+        const done = (dateObj >= createdAtZero && isHabitHandledOnDay(h, dateStr)) ? 1 : 0;
         recentData.push(done);
       }
-      h.checkins?.forEach(d => { if (d.startsWith(prefix)) monthCheckins++; });
-      const rate = ((monthCheckins / todayNum) * 100).toFixed(0);
-      return { ...h, monthCheckins, rate, recentData };
+      
+      const details = reportSnapshot.habitsDetails.find(d => d.id === h.id);
+      const rate = details ? details.monthlyConsistency.toFixed(0) : "0";
+      
+      return { ...h, rate, recentData };
     });
 
     const quitHabitsWithStats = quitHabits.map(h => {
@@ -112,20 +113,25 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
       else if (currentStreak > 0) controlLevel = "بداية مشجعة";
       
       const recentData: number[] = [];
+      const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
+      const createdAtZero = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+
       for (let i = Math.max(1, todayNum - 9); i <= todayNum; i++) {
         const dd = String(i).padStart(2, "0");
         const dateStr = `${prefix}-${dd}`;
-        // For quit habits, NOT being in checkins usually means success if the structure is stored as failures, 
-        // OR it depends on how the app logs it. Assuming streak implies consistent days avoided.
-        // To simplify, we'll draw a straight line based on control level, or actual checkin data if available.
-        // Let's use currentStreak to make a visually pleasing sparkline.
-        recentData.push(currentStreak > (todayNum - i) ? 1 : 0);
+        const dateObj = new Date(year, month, i);
+        const done = (dateObj >= createdAtZero && isHabitHandledOnDay(h, dateStr)) ? 1 : 0;
+        recentData.push(done);
       }
 
       return { ...h, controlLevel, recentData };
     });
 
-    const reportId = `ZOS-${year}${String(month + 1).padStart(2, "0")}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    let habitHash = 0;
+    for(let i = 0; i < safeHabits.length; i++) {
+      habitHash = (habitHash + safeHabits[i].id.charCodeAt(0)) % 1000;
+    }
+    const reportId = `ZOS-${year}${String(month + 1).padStart(2, "0")}-${habitHash.toString(36).toUpperCase()}-${todayNum}`;
 
     return {
       goodHabitsWithStats,
@@ -133,16 +139,16 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
       monthName,
       daysInMonth,
       todayNum,
-      totalGoodCheckins,
-      totalQuitAvoided,
-      bestStreak,
+      totalGoodCheckins: totalGood,
+      totalQuitAvoided: totalQuit,
+      bestStreak: Math.max(...reportSnapshot.habitsDetails.map(d => d.longestStreak), 0),
       longestEver,
       averageDay,
       overallSuccessRate,
       dailyScores,
       reportId,
     };
-  }, [habits, currentDate]);
+  }, [habits, currentDate, reportSnapshot]);
 
   const {
     goodHabitsWithStats,
@@ -336,8 +342,8 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
               </tr>
             </thead>
             <tbody>
-              {monthsStats.slice(0, 6).map((m, i) => {
-                const maxScore = Math.max(...monthsStats.slice(0, 6).map(x => x.limitedScore), 1);
+              {(monthsStats || []).slice(0, 6).map((m, i) => {
+                const maxScore = Math.max(...(monthsStats || []).slice(0, 6).map(x => x.limitedScore), 1);
                 const pct = Math.round((m.limitedScore / maxScore) * 100);
                 const isCurrent = m.isRealCurrent;
                 const barColor = isCurrent ? "#4ADE80" : (pct > 60 ? "#60A5FA" : pct > 30 ? "#F59E0B" : "#52525B");
@@ -403,7 +409,7 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
                     </td>
                     <td style={{ background: "#18181B", padding: "14px 16px", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                       <div style={{ display: "inline-block" }}>
-                        <Sparkline data={(h as any).recentData} width={80} height={24} color={streakColor} fill={true} />
+                        <Sparkline data={(h as any).recentData} width={80} height={24} color={streakColor} fill={true} idHint={h.id} />
                       </div>
                     </td>
                     <td style={{ background: "#18181B", padding: "14px 16px", textAlign: "center", borderRadius: "0 12px 12px 0", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
@@ -464,7 +470,7 @@ export function PrintableReport({ habits, currentDate, monthsStats }: Props) {
                     </td>
                     <td style={{ background: "#18181B", padding: "14px 16px", textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                        <div style={{ display: "inline-block" }}>
-                        <Sparkline data={(h as any).recentData} width={80} height={24} color={lColor} fill={false} />
+                        <Sparkline data={(h as any).recentData} width={80} height={24} color={lColor} fill={false} idHint={h.id} />
                       </div>
                     </td>
                     <td style={{ background: "#18181B", padding: "14px 16px", textAlign: "center", borderRadius: "0 12px 12px 0", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>

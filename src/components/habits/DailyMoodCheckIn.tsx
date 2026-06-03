@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getLocalDateString } from "@/lib/habitCalculations";
 import { toast } from "sonner";
 import { Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -28,7 +29,7 @@ export function DailyMoodCheckIn() {
         return;
       }
       
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = getLocalDateString(now);
       
       const { data: authData } = await supabase.auth.getSession();
       if (!authData.session) return;
@@ -68,17 +69,25 @@ export function DailyMoodCheckIn() {
       5: 'energetic'
     };
     
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalDateString();
     const { data: authData } = await supabase.auth.getSession();
     if (authData.session) {
-      await supabase.from('daily_moods').upsert({
+      const { error } = await supabase.from('daily_moods').upsert({
         user_id: authData.session.user.id,
         day_local: todayStr,
         mood: moodMap[score] || 'neutral'
       }, { onConflict: 'user_id, day_local' });
+      
+      if (error) {
+        console.error('Failed to save mood:', error);
+        setIsProcessing(false);
+        toast.error("فشل تسجيل الحالة المزاجية، حاول مرة أخرى");
+        setSelectedMood(null);
+        return;
+      }
     }
     
-    // Simulate AI processing
+    // Brief processing delay
     setTimeout(() => {
       setIsProcessing(false);
       setIsSubmitted(true);
@@ -87,7 +96,7 @@ export function DailyMoodCheckIn() {
       toast.success("تم تسجيل حالتك المزاجية! سيقوم الذكاء الاصطناعي بتحليلها مع عاداتك.", {
         icon: <Sparkles className="text-blue-400" />
       });
-    }, 1500);
+    }, 800);
   };
 
   if (!isVisible && !isSubmitted) return null;

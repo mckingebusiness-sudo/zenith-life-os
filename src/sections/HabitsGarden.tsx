@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Sparkles, Loader2 } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 import { getPlantState } from "@/components/habits/garden/plantConfig";
 import HabitPlant from "@/components/habits/garden/HabitPlant";
+import { calculateHabitStrength } from "@/lib/habitAnalyticsEngine";
 
 export default function HabitsGarden() {
-  const { habits, checkIn } = useHabits(new Date());
+  const { habits, checkIn, isLoading } = useHabits();
   const [burst, setBurst] = useState<string | null>(null);
 
   const activeHabits = habits.slice(0, 5); // Take top 5 for the small widget
@@ -71,7 +72,11 @@ export default function HabitsGarden() {
         />
       </div>
 
-      {activeHabits.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6 text-green-500/50 relative z-10">
+          <Loader2 className="animate-spin" size={24} />
+        </div>
+      ) : activeHabits.length === 0 ? (
         <div className="text-center py-6 relative z-10 text-muted-foreground text-sm">
           لا توجد عادات بعد
         </div>
@@ -79,10 +84,9 @@ export default function HabitsGarden() {
         <div className="grid grid-cols-5 gap-3 relative z-10">
           {activeHabits.map((habit, i) => {
             const state = getPlantState(
+              calculateHabitStrength(habit),
               habit.streak?.current_streak || 0,
-              habit.streak?.longest_streak || 0,
-              habit.streak?.total_checkins || 0,
-              habit.cadence
+              habit.streak?.total_checkins || 0
             );
             
             return (

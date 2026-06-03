@@ -93,7 +93,7 @@ export async function createTask(
 export async function updateTask(
   taskId: string,
   updates: Partial<Task>
-): Promise<{ error: Error | null }> {
+): Promise<{ data: Task | null; error: Error | null }> {
   const payload: Partial<Task> & { completed_at?: string | null } = { ...updates };
 
   if (updates.status === "done" && !updates.completed_at) {
@@ -102,12 +102,20 @@ export async function updateTask(
     (payload as any).completed_at = null;
   }
 
-  const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
-  return { error };
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(payload)
+    .eq("id", taskId)
+    .select()
+    .single();
+  return { data: data as Task | null, error };
 }
 
 export async function deleteTask(taskId: string): Promise<{ error: Error | null }> {
-  const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ is_archived: true })
+    .eq("id", taskId);
   return { error };
 }
 

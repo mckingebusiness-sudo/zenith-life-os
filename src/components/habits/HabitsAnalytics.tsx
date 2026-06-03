@@ -6,9 +6,13 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { PrintableReport } from "./PrintableReport";
-import { calculateDayProgress } from "@/lib/habitCalculations";
+import { calculateDayProgress, isHabitHandledOnDay, getLocalDateString } from "@/lib/habitCalculations";
+import { buildHabitReportSnapshot, getAiAnalysisDataset } from "@/lib/habitAnalyticsEngine";
+import { generateStableReportData } from "@/lib/habitsReportSnapshot";
 import { HabitsAIAnalysis } from "./HabitsAIAnalysis";
 import { generateComplexAnalyticsReport } from "@/lib/gemini";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -20,10 +24,27 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(false);
-  const [recoveryUsed, setRecoveryUsed] = useState(() => {
-    const key = `recovery_${new Date().getFullYear()}_${new Date().getMonth()}`;
-    return !!localStorage.getItem(key);
-  });
+  const [recoveryUsed, setRecoveryUsed] = useState(false);
+  
+  useEffect(() => {
+    async function checkRecovery() {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) return;
+      
+      const monthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      const { data } = await supabase
+        .from("monthly_recoveries")
+        .select("*")
+        .eq("user_id", authData.session.user.id)
+        .eq("month_local", monthStr)
+        .single();
+        
+      if (data) {
+        setRecoveryUsed(true);
+      }
+    }
+    checkRecovery();
+  }, []);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showMoreMonths, setShowMoreMonths] = useState(false);
@@ -33,7 +54,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     const loadCachedReport = async () => {
       const { data: authData } = await supabase.auth.getSession();
       if (!authData.session) return;
-      const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      const today = getLocalDateString();
       const cached = localStorage.getItem(`zenith_ai_report_${authData.session.user.id}_${today}`);
       if (cached) {
         setAiInsight(cached);
@@ -87,6 +108,14 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     return [0, 10, 20, 28];
   }, [daysInMonth]);
 
+  const [user, setUser] = useState<any>(null);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
+  }, []);
+  const [snapshot, setSnapshot] = useState<any>(null);
+  const [pdfSnapshot, setPdfSnapshot] = useState<any>(null);
+  const reactiveSnapshot = useMemo(() => buildHabitReportSnapshot(habits, getLocalDateString(currentDate)), [habits, currentDate]);
+
   const monthlyData = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -94,9 +123,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     const result = [];
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(year, month, i);
-      const mm = String(month + 1).padStart(2, "0");
-      const dd = String(i).padStart(2, "0");
-      const dateStr = `${year}-${mm}-${dd}`;
+      const dateStr = getLocalDateString(d);
 
       const isFuture = d > new Date(new Date().setHours(23,59,59,999));
       
@@ -116,56 +143,38 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
 
   // Per-habit stats for bar chart
   const habitStats = useMemo(() => {
-    const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
-    const realNow = new Date();
-    const isCurrentMonth = currentDate.getFullYear() === realNow.getFullYear() && currentDate.getMonth() === realNow.getMonth();
-    const daysToConsider = isCurrentMonth ? realNow.getDate() : daysInMonth;
-
-    return habits.map(h => {
+    return (snapshot?.habitsDetails || []).map((detail: any) => {
+      const habit = habits.find(h => h.id === detail.id);
       let monthCheckins = 0;
-      if (h.habit_type === 'quit') {
-        const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
-        for (let i = 1; i <= daysToConsider; i++) {
-          const dateStr = `${prefix}-${String(i).padStart(2, "0")}`;
-          const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
-          if (dateObj >= new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate())) {
-            if (!h.relapses?.has(dateStr)) {
-              monthCheckins++;
-            }
-          }
+      const isCurrentMonth = currentDate.getFullYear() === new Date().getFullYear() && currentDate.getMonth() === new Date().getMonth();
+      const daysToConsider = isCurrentMonth ? new Date().getDate() : daysInMonth;
+      const createdAt = habit?.created_at ? new Date(habit.created_at) : new Date(0);
+      const createdAtZero = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+      for (let i = 1; i <= daysToConsider; i++) {
+        const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+        const dateStr = getLocalDateString(dateObj);
+        if (dateObj >= createdAtZero && habit && isHabitHandledOnDay(habit, dateStr)) {
+          monthCheckins++;
         }
-      } else {
-        h.checkins?.forEach(dateStr => {
-          if (dateStr.startsWith(prefix)) monthCheckins++;
-        });
       }
       return {
-        name: h.title.length > 12 ? h.title.slice(0, 12) + "…" : h.title,
-        icon: h.icon || "✨",
+        name: detail.title.length > 12 ? detail.title.slice(0, 12) + "…" : detail.title,
+        icon: habit?.icon || "✨",
         checkins: monthCheckins,
-        streak: h.streak?.current_streak || 0,
-        color: h.color,
+        streak: detail.currentStreak,
+        color: habit?.color || "emerald",
       };
     });
-  }, [habits, currentDate, daysInMonth]);
+  }, [snapshot, habits, currentDate, daysInMonth]);
 
-  const bestStreak = useMemo(() => {
-    return Math.max(...habits.map(h => h.streak?.longest_streak || 0), 0);
-  }, [habits]);
-
-  const perfectDays = useMemo(() => {
-    return monthlyData.filter((d: any) => d.percentage === 100 && d.الإنجاز > 0).length;
-  }, [monthlyData]);
-
+  const bestStreak = useMemo(() => Math.max(...(snapshot?.habitsDetails || []).map((h: any) => h.longestStreak), 0), [snapshot]);
+  const perfectDays = snapshot?.monthStats?.perfectDays || 0;
+  
   const totalCheckinsThisMonth = useMemo(() => {
     return monthlyData.reduce((sum: number, d: any) => sum + (d.الإنجاز || 0), 0);
   }, [monthlyData]);
 
-  const averageCompletion = useMemo(() => {
-    const validDays = monthlyData.filter((d: any) => (d.الإنجاز || 0) > 0 || new Date(d.dateStr) <= new Date());
-    if (validDays.length === 0) return 0;
-    return Math.round(validDays.reduce((s: number, d: any) => s + (d.percentage || 0), 0) / validDays.length);
-  }, [monthlyData]);
+  const averageCompletion = snapshot?.monthStats?.averagePercentage || 0;
 
   const stats = useMemo(() => [
     {
@@ -173,6 +182,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       iconBg: "from-orange-500/20 to-amber-500/10",
       iconColor: "text-orange-400",
       label: "أفضل سلسلة إنجاز",
+      tooltip: "أطول عدد أيام متتالية التزمت فيها بعاداتك دون انقطاع.",
       value: bestStreak,
       unit: "يوم",
       extra: !recoveryUsed && bestStreak > 0 ? (
@@ -190,7 +200,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
                     if (!authData.session) return;
                     const yesterday = new Date();
                     yesterday.setDate(yesterday.getDate() - 1);
-                    const yStr = new Intl.DateTimeFormat("en-CA").format(yesterday);
+                    const yStr = getLocalDateString(yesterday);
                     const bestHabit = habits.find((h: any) => h.streak?.current_streak === 0 && h.streak?.longest_streak > 5);
                     if (bestHabit) {
                       await supabase.from("habit_checkins").insert({ habit_id: bestHabit.id, user_id: authData.session.user.id, day_local: yStr });
@@ -220,6 +230,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       iconBg: "from-green-500/20 to-emerald-500/10",
       iconColor: "text-green-400",
       label: "أيام مثالية (100%)",
+      tooltip: "عدد الأيام التي أكملت فيها جميع عاداتك دون استثناء في هذا الشهر.",
       value: perfectDays,
       unit: "أيام",
     },
@@ -228,6 +239,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       iconBg: "from-blue-500/20 to-cyan-500/10",
       iconColor: "text-blue-400",
       label: "إنجازات الشهر",
+      tooltip: "إجمالي عدد المرات التي التزمت فيها بأي عادة خلال هذا الشهر.",
       value: totalCheckinsThisMonth,
       unit: "مرة",
     },
@@ -236,6 +248,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       iconBg: "from-purple-500/20 to-pink-500/10",
       iconColor: "text-purple-400",
       label: "متوسط الإنجاز",
+      tooltip: "متوسط التزامك اليومي بجميع العادات معاً.",
       value: averageCompletion,
       unit: "%",
     },
@@ -304,15 +317,36 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
     setAiLoading(true);
     setAiError(false);
 
-    let timeoutId: NodeJS.Timeout;
+    const controller = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      // Force loading state off after 70 seconds no matter what
+      // Force loading state off and abort request after 70 seconds no matter what
       timeoutId = setTimeout(() => {
+        controller.abort();
         setAiLoading(false);
       }, 70000);
 
-      const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      if (!navigator.onLine) {
+        toast.error("أنت غير متصل بالإنترنت حالياً. يرجى المحاولة لاحقاً.", { style: { background: '#333', color: '#fff' } });
+        setAiLoading(false);
+        return;
+      }
+
+      let stableData;
+      try {
+        stableData = generateStableReportData(habits, currentDate);
+      } catch (err: any) {
+        if (err.message === "PENDING_WRITES") {
+          toast.error("يتم الآن حفظ التعديلات.. الرجاء الانتظار قليلاً قبل التحليل.", { style: { background: '#333', color: '#fff' } });
+        } else {
+          toast.error("حدث خطأ أثناء جمع البيانات.");
+        }
+        setAiLoading(false);
+        return;
+      }
+
+      const today = getLocalDateString();
       const { data: authData } = await supabase.auth.getSession();
       if (!authData.session) {
         toast.error("يرجى تسجيل الدخول أولاً لاستخدام الذكاء الاصطناعي");
@@ -331,6 +365,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
       // PGRST116 means 0 rows, which is fine (first time today)
       if (usageError && usageError.code !== 'PGRST116') {
         console.error("Error checking usage:", usageError);
+        throw usageError;
       }
         
       const count = usageData?.usage_count || 0;
@@ -352,28 +387,11 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         isRealCurrent: m.isRealCurrent
       })));
 
-      const habitDetailsStr = habits.map(h => {
-        const isQuit = h.habit_type === 'quit';
-        const typeStr = isQuit ? "تجنب عادة سيئة" : "بناء عادة إيجابية";
-        const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
-        let monthCheckins = 0;
-        if (isQuit) {
-          const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
-          const daysToConsider = isCurrentMonth ? new Date().getDate() : new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-          for (let i = 1; i <= daysToConsider; i++) {
-            const dateStr = `${prefix}-${String(i).padStart(2, "0")}`;
-            const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
-            if (dateObj >= new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate())) {
-              if (!h.relapses?.has(dateStr)) monthCheckins++;
-            }
-          }
-        } else {
-          h.checkins?.forEach(dateStr => {
-            if (dateStr.startsWith(prefix)) monthCheckins++;
-          });
-        }
-        return `- العادة: "${h.title}" | النوع: ${typeStr} | الإنجاز هذا الشهر: ${monthCheckins} | السلسلة: ${h.streak?.current_streak || 0} يوم`;
-      }).join('\\n');
+      const aiDataset = stableData.aiDataset;
+      const habitDetailsStr = [
+        ...aiDataset.goodHabits.map((h: any) => `- العادة: "${h.title}" | النوع: بناء عادة إيجابية | الالتزام: ${h.consistency}% | السلسلة: ${h.currentStreak} يوم | قوة العادة: ${h.strength}%`),
+        ...aiDataset.quitHabits.map((h: any) => `- العادة: "${h.title}" | النوع: تجنب عادة سيئة | الالتزام: ${h.consistency}% | السلسلة: ${h.currentStreak} يوم | خطر الانتكاسة: ${h.risk}%`)
+      ].join('\\n');
 
       const prompt = `أنت "زينيث"، خبير عالمي متمرس في تحليل البيانات السلوكية، وتطوير الأداء الشخصي، وعلم النفس المعرفي. مهمتك الآن تقديم تحليل شامل، عميق، وقاسٍ أحياناً لبيانات المستخدم لشهر ${selectedMonthName}. المستخدم يكره السطحية ويريد تحليل خبير غائص في التفاصيل.
 
@@ -418,7 +436,7 @@ ${habitDetailsStr}
       console.error("AI report error:", err);
       toast.error("فشل الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.", { style: { background: '#333', color: '#fff' } });
     } finally {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
       setAiLoading(false);
     }
   };
@@ -427,12 +445,40 @@ ${habitDetailsStr}
     if (isExporting) return;
     setIsExporting(true);
 
+    let data;
     try {
-      window.print();
+      // Ensure we have stable data
+      data = generateStableReportData(habits, currentDate);
+    } catch (err: any) {
+      if (err.message === "PENDING_WRITES") {
+        toast.error("يرجى الانتظار حتى اكتمال مزامنة البيانات قبل الطباعة.");
+      } else {
+        toast.error("حدث خطأ أثناء جمع البيانات.");
+      }
+      setIsExporting(false);
+      return;
+    }
+
+    try {
+      const isMobileApp = window.matchMedia('(display-mode: standalone)').matches && /Mobi|Android|iPhone/i.test(navigator.userAgent);
+      if (isMobileApp) {
+        toast.error('ميزة الطباعة غير مدعومة داخل التطبيق. يرجى فتح الموقع في متصفح خارجي.');
+        setIsExporting(false);
+        return;
+      }
+      
+      setPdfSnapshot(data.snapshot);
+      
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          setPdfSnapshot(null);
+          setIsExporting(false);
+        }, 1000);
+      }, 500);
     } catch (err) {
       console.error('PDF error:', err);
       toast.error('حدث خطأ في الطباعة');
-    } finally {
       setIsExporting(false);
     }
   };
@@ -459,7 +505,7 @@ ${habitDetailsStr}
 
   return (
     <>
-      <PrintableReport habits={habits} currentDate={currentDate} monthsStats={monthsStats} />
+      <PrintableReport habits={habits} currentDate={currentDate} monthsStats={monthsStats} reportSnapshot={pdfSnapshot || reactiveSnapshot} />
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
@@ -547,42 +593,56 @@ ${habitDetailsStr}
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat: any, i: number) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 + i * 0.05 }}
-            whileHover={{ y: -4, scale: 1.01 }}
-            className="glass rounded-3xl p-6 border border-white/[0.06] flex flex-col justify-between min-h-[148px] group hover:bg-white/[0.02] transition-all duration-300 relative overflow-hidden"
-          >
-            {/* Glowing background hint */}
-            <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full blur-2xl opacity-10 bg-gradient-to-br ${stat.iconBg} pointer-events-none`} />
+      <TooltipProvider>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((stat: any, i: number) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 + i * 0.05 }}
+              whileHover={{ y: -4, scale: 1.01 }}
+              className="glass rounded-3xl p-6 border border-white/[0.06] flex flex-col justify-between min-h-[148px] group hover:bg-white/[0.02] transition-all duration-300 relative overflow-hidden"
+            >
+              {/* Glowing background hint */}
+              <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full blur-2xl opacity-10 bg-gradient-to-br ${stat.iconBg} pointer-events-none`} />
 
-            {/* Top row: Icon */}
-            <div className="flex items-center justify-between relative z-10">
-              <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${stat.iconBg} flex items-center justify-center ${stat.iconColor} border border-white/5 shrink-0 group-hover:scale-105 transition-transform`}>
-                {stat.icon}
+              {/* Top row: Icon */}
+              <div className="flex items-center justify-between relative z-10">
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${stat.iconBg} flex items-center justify-center ${stat.iconColor} border border-white/5 shrink-0 group-hover:scale-105 transition-transform`}>
+                  {stat.icon}
+                </div>
+                {stat.tooltip && (
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <button className="text-white/20 hover:text-white/60 transition cursor-help rounded-full p-1" data-html2canvas-ignore>
+                        <Info size={16} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[200px] text-xs bg-black/90 border-white/10 text-[#A7B3AB]" dir="rtl">
+                      <p>{stat.tooltip}</p>
+                    </TooltipContent>
+                  </UITooltip>
+                )}
               </div>
-            </div>
 
-            {/* Bottom info */}
-            <div className="relative z-10 mt-auto text-right" dir="rtl">
-              <div className="text-[#A7B3AB] text-xs font-bold opacity-60 mb-2">{stat.label}</div>
-              <div className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">
-                {stat.value} <span className="text-sm font-bold text-[#A7B3AB] mr-1">{stat.unit}</span>
+              {/* Bottom info */}
+              <div className="relative z-10 mt-auto text-right" dir="rtl">
+                <div className="text-[#A7B3AB] text-xs font-bold opacity-60 mb-2">{stat.label}</div>
+                <div className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">
+                  {stat.value} <span className="text-sm font-bold text-[#A7B3AB] mr-1">{stat.unit}</span>
+                </div>
               </div>
-            </div>
 
-            {stat.extra && (
-              <div className="relative z-10 mt-3" data-html2canvas-ignore>
-                {stat.extra}
-              </div>
-            )}
-          </motion.div>
-        ))}
-      </div>
+              {stat.extra && (
+                <div className="relative z-10 mt-3" data-html2canvas-ignore>
+                  {stat.extra}
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      </TooltipProvider>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="glass rounded-3xl p-6 border border-white/[0.06]">
@@ -660,7 +720,7 @@ ${habitDetailsStr}
                   formatter={(value: number) => [`${value} مرة`, "الإنجاز"]}
                 />
                 <Bar dataKey="checkins" radius={[6, 6, 0, 0]} maxBarSize={35}>
-                  {habitStats.map((entry, index) => (
+                  {habitStats.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={HABIT_COLORS[entry.color] || '#4ADE80'} fillOpacity={0.7} />
                   ))}
                 </Bar>

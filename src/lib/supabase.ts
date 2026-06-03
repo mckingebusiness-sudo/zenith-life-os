@@ -65,48 +65,86 @@ export interface UserSettings {
   updated_at: string;
 }
 
+/**
+ * @deprecated Use the Habit type from '@/hooks/useHabits' instead.
+ * This legacy type is kept only for backward compatibility with non-habit modules.
+ * The actual DB schema uses: title, cadence, target_per_period, active_weekdays,
+ * habit_type, is_deleted, tracking_type.
+ */
 export interface Habit {
   id: string;
   user_id: string;
-  name: string;
-  description?: string;
-  icon: string;
+  title: string;
+  description?: string | null;
+  icon?: string | null;
   color: string;
-  category:
-    | "health"
-    | "fitness"
-    | "learning"
-    | "mindfulness"
-    | "social"
-    | "personal"
-    | "work"
-    | "finance"
-    | "other";
-  frequency: "daily" | "weekly" | "monthly" | "custom";
-  frequency_days: number[];
-  target_count: number;
-  streak: number;
-  longest_streak: number;
-  level: number;
-  total_completions: number;
-  is_active: boolean;
-  reminder_enabled: boolean;
-  reminder_time?: string;
+  cadence: "daily" | "weekly" | "monthly" | "times_per_week";
+  target_per_period: number;
+  active_weekdays: number[];
+  grace_days: number;
+  is_private: boolean;
+  sort_order: number;
+  habit_type: "good" | "quit";
+  is_deleted: boolean;
+  is_paused?: boolean;
+  pause_until?: string | null;
+  tracking_type?: "checkbox" | "quantitative";
+  target_value?: number | null;
+  target_unit?: string | null;
+  saved_value_per_day?: number | null;
+  saved_unit?: string | null;
   created_at: string;
-  updated_at: string;
-  // Virtual field from join
-  done_today?: boolean;
+  updated_at?: string;
 }
 
+/**
+ * @deprecated HabitCompletion is replaced by habit_checkins table.
+ * Kept for type compatibility only.
+ */
 export interface HabitCompletion {
   id: string;
   habit_id: string;
   user_id: string;
-  completed_at: string;
-  count: number;
-  note?: string;
-  mood?: number;
+  day_local: string;
   created_at: string;
+}
+
+export interface HabitUrgeLog {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  day_local: string;
+  urge_level: number;
+  trigger?: string;
+  created_at: string;
+}
+
+export interface HabitRecoveryEvent {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  day_local: string;
+  action_taken: string;
+  created_at: string;
+}
+
+export interface HabitSOSSession {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  feeling?: string;
+  suggested_alternative?: string;
+  outcome?: string;
+  created_at: string;
+}
+
+export interface HabitWhyWall {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  reason: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Goal {

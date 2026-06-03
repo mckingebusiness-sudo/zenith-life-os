@@ -1,22 +1,59 @@
-import { Sparkles, Check, X } from "lucide-react";
+import { Sparkles, Check, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-
-const fullText =
-  "لاحظت نمطاً واضحاً في بياناتك: أنت أكثر إنتاجية الثلاثاء والأربعاء بـ 34% من المتوسط. أقترح نقل المهام الثقيلة لهذين اليومين تلقائياً.";
+import { useHabits } from "@/hooks/useHabits";
+import { getAiAnalysisDataset } from "@/lib/habitAnalyticsEngine";
+import { generateDashboardInsight } from "@/lib/gemini";
+import { getLocalDateString } from "@/lib/habitCalculations";
 
 export default function AIInsight() {
+  const { habits } = useHabits();
+  const [insight, setInsight] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
-  const [applied, setApplied] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
+    const todayStr = getLocalDateString();
+    const stored = localStorage.getItem("zenith_daily_insight");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.date === todayStr && parsed.text) {
+          setInsight(parsed.text);
+          return;
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!insight) return;
     let i = 0;
     const id = setInterval(() => {
       i++;
-      setTyped(fullText.slice(0, i));
-      if (i >= fullText.length) clearInterval(id);
+      setTyped(insight.slice(0, i));
+      if (i >= insight.length) clearInterval(id);
     }, 22);
     return () => clearInterval(id);
-  }, []);
+  }, [insight]);
+
+  const generateInsight = async () => {
+    setIsLoading(true);
+    const dataset = getAiAnalysisDataset(habits);
+    const res = await generateDashboardInsight(dataset);
+    setIsLoading(false);
+    if (res) {
+      setInsight(res);
+      localStorage.setItem("zenith_daily_insight", JSON.stringify({
+        date: getLocalDateString(),
+        text: res
+      }));
+    } else {
+      // Fallback
+      setInsight("البيانات الحالية لا تكفي لاستنتاج دقيق، استمر في تتبع عاداتك وسأراقب تقدمك.");
+    }
+  };
+
   return (
     <motion.section
       whileHover={{ y: -2 }}
@@ -50,7 +87,7 @@ export default function AIInsight() {
         <motion.div
           animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.06, 1] }}
           transition={{ duration: 4, repeat: Infinity }}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0"
           style={{
             background: "linear-gradient(135deg, #15803D, #4ADE80)",
             boxShadow: "0 0 20px rgba(34,197,94,0.5)",
@@ -59,53 +96,44 @@ export default function AIInsight() {
           <Sparkles size={14} />
         </motion.div>
         <div>
-          <div className="text-sm font-bold text-foreground">رؤية زينيث</div>
-          <div className="text-[10px] text-muted-foreground">منذ 5 دقائق</div>
+          <div className="text-sm font-bold text-foreground">رؤية زينيث AI</div>
+          <div className="text-[10px] text-muted-foreground">{insight ? "تم التحليل بنجاح" : "جاهز للتحليل"}</div>
         </div>
       </div>
 
-      <p className="text-[15px] leading-[1.8] text-foreground mb-5 max-w-[480px] min-h-[110px] relative z-10">
-        {typed}
-        {typed.length < fullText.length && (
-          <motion.span
-            animate={{ opacity: [1, 0, 1] }}
-            transition={{ duration: 0.8, repeat: Infinity }}
-            className="inline-block w-1.5 h-4 bg-green-400 ml-0.5 align-middle"
-          />
-        )}
-      </p>
-
-      <div className="flex items-center gap-2 relative z-10">
-        <motion.button
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setApplied(true)}
-          className="px-4 py-2 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 transition hover:scale-[1.02] text-white"
-          style={{
-            background: applied
-              ? "linear-gradient(135deg, #4ADE80, #22C55E)"
-              : "linear-gradient(135deg, #15803D, #22C55E)",
-            boxShadow: "0 0 20px rgba(34,197,94,0.3)",
-          }}
-        >
-          <AnimatePresence mode="wait">
-            {applied ? (
-              <motion.span key="ok" initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center gap-1.5">
-                <Check size={13} /> تم التطبيق
-              </motion.span>
-            ) : (
-              <motion.span key="apply" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5">
-                <Check size={13} /> طبّق الآن
-              </motion.span>
+      <div className="min-h-[110px] relative z-10 flex flex-col justify-center">
+        {!insight && !isLoading ? (
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">احصل على استنتاج يومي دقيق مبني على تقدمك في عاداتك الحالية.</p>
+            <button
+              onClick={generateInsight}
+              className="px-5 py-2.5 rounded-xl text-[13px] font-semibold flex items-center gap-2 mx-auto transition hover:scale-[1.02] text-white"
+              style={{
+                background: "linear-gradient(135deg, #15803D, #22C55E)",
+                boxShadow: "0 0 20px rgba(34,197,94,0.3)",
+              }}
+            >
+              <Sparkles size={14} />
+              تحليل يومي
+            </button>
+          </div>
+        ) : isLoading ? (
+          <div className="flex flex-col items-center justify-center gap-2 text-green-400 opacity-80">
+            <Loader2 className="animate-spin" size={24} />
+            <span className="text-xs font-medium">يتم استنتاج الأنماط...</span>
+          </div>
+        ) : (
+          <p className="text-[15px] leading-[1.8] text-foreground max-w-[480px]">
+            {typed}
+            {(insight && typed.length < insight.length) && (
+              <motion.span
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 0.8, repeat: Infinity }}
+                className="inline-block w-1.5 h-4 bg-green-400 ml-0.5 align-middle"
+              />
             )}
-          </AnimatePresence>
-        </motion.button>
-        <button className="px-4 py-2 rounded-xl text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted transition">
-          اشرح أكثر
-        </button>
-        <button className="w-8 h-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition flex items-center justify-center">
-          <X size={14} />
-        </button>
+          </p>
+        )}
       </div>
     </motion.section>
   );

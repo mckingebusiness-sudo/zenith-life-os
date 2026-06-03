@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { useMutation } from "@tanstack/react-query";
 
 interface Props {
   habits: HabitWithStreak[];
@@ -213,32 +214,52 @@ export function BadHabitsTracker({ habits, onResetStreak, onUndoRelapse }: Props
     finally { setUndoingId(null); }
   };
 
+  const lockdownMutation = useMutation({
+    mutationFn: async ({ id, next, userId }: any) => {
+      if (next) {
+        const lockedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        await supabase.from('habit_lockdowns').upsert({
+          user_id: userId, habit_id: id, locked_until: lockedUntil
+        }, { onConflict: 'user_id,habit_id' }).throwOnError();
+      } else {
+        await supabase.from('habit_lockdowns')
+          .delete()
+          .eq('user_id', userId)
+          .eq('habit_id', id)
+          .throwOnError();
+      }
+    },
+    onError: () => toast.error("حدث خطأ في تحديث الدرع")
+  });
+
   const toggleLockdown = async (id: string) => {
     const next = !lockdownMode[id];
     setLockdownMode(p => ({ ...p, [id]: next }));
-    
     toast[next ? "success" : "info"](
       next ? "تم تفعيل درع الحصار 24 ساعة! حماية نشطة 🛡️" : "تم إلغاء قفل الدرع"
     );
 
     const { data: authData } = await supabase.auth.getSession();
     if (!authData.session) return;
-    const userId = authData.session.user.id;
-    
-    if (next) {
-      const lockedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      await supabase.from('habit_lockdowns').insert({
-        user_id: userId,
-        habit_id: id,
-        locked_until: lockedUntil
-      });
-    } else {
-      await supabase.from('habit_lockdowns')
-        .delete()
-        .eq('user_id', userId)
-        .eq('habit_id', id);
-    }
+    lockdownMutation.mutate({ id, next, userId: authData.session.user.id });
   };
+
+  const saveMessageMutation = useMutation({
+    mutationFn: async ({ habitId, userId, msg }: any) => {
+      if (msg.trim()) {
+        await supabase.from('habit_vault_messages').upsert({
+          user_id: userId, habit_id: habitId, encrypted_message: msg
+        }, { onConflict: 'user_id,habit_id' }).throwOnError();
+      } else {
+        await supabase.from('habit_vault_messages')
+          .delete()
+          .eq('user_id', userId)
+          .eq('habit_id', habitId)
+          .throwOnError();
+      }
+    },
+    onError: () => toast.error("حدث خطأ في حفظ الرسالة")
+  });
 
   const handleSaveMessage = async () => {
     if (!activeHabitId) return;
@@ -259,43 +280,32 @@ export function BadHabitsTracker({ habits, onResetStreak, onUndoRelapse }: Props
 
     const { data: authData } = await supabase.auth.getSession();
     if (!authData.session) return;
-    const userId = authData.session.user.id;
-    
-    if (msg.trim()) {
-      await supabase.from('habit_vault_messages').upsert({
-        user_id: userId,
-        habit_id: habitId,
-        encrypted_message: msg
-      }, { onConflict: 'habit_id' });
-    } else {
-      await supabase.from('habit_vault_messages')
-        .delete()
-        .eq('user_id', userId)
-        .eq('habit_id', habitId);
-    }
+    saveMessageMutation.mutate({ habitId, userId: authData.session.user.id, msg });
   };
+
+  const urgeChangeMutation = useMutation({
+    mutationFn: async ({ habitId, userId, val }: any) => {
+      const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      await supabase.from('urge_levels').upsert({
+        user_id: userId, habit_id: habitId, day_local: today, urge_level: val
+      }, { onConflict: 'habit_id,day_local' }).throwOnError();
+    },
+    onError: () => toast.error("فشل حفظ مستوى الرغبة")
+  });
 
   const handleUrgeChange = async (habitId: string, val: number) => {
     setUrgeLevels(p => ({ ...p, [habitId]: val }));
     
     const { data: authData } = await supabase.auth.getSession();
     if (authData.session) {
-      // Upsert urge level to db (assuming a user only has one active urge log per habit, so we replace or update)
-      // Note: If you want to keep history you might want to only insert or add a unique constraint.
-      // But standard 'id' constraint is needed for upsert, or a unique pair.
-      // Let's just insert it to log history.
-      await supabase.from('urge_levels').insert({
-        user_id: authData.session.user.id,
-        habit_id: habitId,
-        urge_level: val
-      });
+      urgeChangeMutation.mutate({ habitId, userId: authData.session.user.id, val });
     }
   };
 
   /* ── Global Stats ── */
   const totalDays   = badHabits.reduce((a, h) => a + (h.streak?.current_streak || 0), 0);
   const bestStreak  = Math.max(0, ...badHabits.map(h => h.streak?.longest_streak || 0));
-  const totalLapse  = badHabits.reduce((a, h) => a + ((h as any).relapseLogs?.length || 0), 0);
+  const totalLapse  = badHabits.reduce((a, h) => a + (h.relapses?.size || 0), 0);
 
   const activeHabit = badHabits.find(h => h.id === activeHabitId) || badHabits[0];
   if (!activeHabit) return null;

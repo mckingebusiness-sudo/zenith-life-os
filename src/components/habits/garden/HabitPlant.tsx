@@ -379,33 +379,24 @@ export default function HabitPlant({ level, isDormant, sway, habitName }: HabitP
           const tip = SB - h;
           return (
             <>
-              {/* Heavy side branches near base */}
-              <Branch d={`M 40 ${SB-h*0.22} C 26 ${SB-h*0.30} 14 ${SB-h*0.20} 8  ${SB-h*0.08}`} w={2.6} />
-              <Branch d={`M 40 ${SB-h*0.22} C 54 ${SB-h*0.30} 66 ${SB-h*0.20} 72 ${SB-h*0.08}`} w={2.6} />
+              {/* Simpler, more compact side branches */}
+              <Branch d={`M 40 ${SB-h*0.2} C 30 ${SB-h*0.3} 20 ${SB-h*0.2} 15 ${SB-h*0.1}`} w={2.2} />
+              <Branch d={`M 40 ${SB-h*0.2} C 50 ${SB-h*0.3} 60 ${SB-h*0.2} 65 ${SB-h*0.1}`} w={2.2} />
 
-              <Leaf cx={7}  cy={SB-h*0.08} rx={13} ry={6}  rot={-10} grad={gLeafD} />
-              <Leaf cx={5}  cy={SB-h*0.10} rx={8}  ry={3.8} rot={-20} grad={gLeafL} op={0.85} />
-              <Leaf cx={7}  cy={SB-h*0.08} rx={13} ry={6}  rot={-10} grad={gLeafSS} op={0.28} />
-              <Vein x1={20} y1={SB-h*0.08} x2={3}  y2={SB-h*0.07} />
+              <Leaf cx={15} cy={SB-h*0.1} rx={10} ry={5} rot={-10} grad={gLeafD} />
+              <Leaf cx={65} cy={SB-h*0.1} rx={10} ry={5} rot={10} grad={gLeafL} />
 
-              <Leaf cx={73} cy={SB-h*0.08} rx={13} ry={6}  rot={10} grad={gLeafL} />
-              <Leaf cx={75} cy={SB-h*0.10} rx={8}  ry={3.8} rot={20} grad={gLeafD} op={0.85} />
-              <Leaf cx={73} cy={SB-h*0.08} rx={13} ry={6}  rot={10} grad={gLeafSS} op={0.28} />
-
-              {/* Massive layered canopy */}
-              <Leaf cx={40} cy={tip+9}  rx={26} ry={18}  grad={gLeafD} op={0.85} />
-              <Leaf cx={22} cy={tip+8}  rx={17} ry={12}  rot={-5}  grad={gLeafL} />
-              <Leaf cx={58} cy={tip+8}  rx={17} ry={12}  rot={5}   grad={gLeafD} />
-              <Leaf cx={40} cy={tip+1}  rx={20} ry={15}  grad={gLeafL} />
-              <Leaf cx={40} cy={tip-8}  rx={15} ry={11}  grad={gLeafL} />
-              <Leaf cx={40} cy={tip-16} rx={10} ry={7.5} grad={gLeafL} />
-              <Leaf cx={40} cy={tip-22} rx={6.5} ry={5}  grad={gLeafL} />
+              {/* Layered canopy - simplified and smaller to prevent overlapping */}
+              <Leaf cx={40} cy={tip+10} rx={22} ry={16} grad={gLeafD} op={0.9} />
+              <Leaf cx={26} cy={tip+12} rx={14} ry={10} rot={-5} grad={gLeafL} />
+              <Leaf cx={54} cy={tip+12} rx={14} ry={10} rot={5} grad={gLeafD} />
+              <Leaf cx={40} cy={tip} rx={16} ry={12} grad={gLeafL} />
+              <Leaf cx={40} cy={tip-10} rx={12} ry={9} grad={gLeafL} />
+              
               {/* SS scatter */}
-              <Leaf cx={40} cy={tip+9}  rx={26} ry={18}  grad={gLeafSS} op={0.18} />
+              <Leaf cx={40} cy={tip+10} rx={22} ry={16} grad={gLeafSS} op={0.15} />
               {/* Specular */}
-              <ellipse cx={36} cy={tip-9} rx={7} ry={4.5} fill={C.leafHL} opacity={0.3} filter={`url(#${fSpec})`} />
-              {/* Back-rim lighting */}
-              <ellipse cx={40} cy={tip+26} rx={26} ry={4} fill={C.leafC} opacity={0.08} />
+              <ellipse cx={37} cy={tip-10} rx={6} ry={4} fill={C.leafHL} opacity={0.25} filter={`url(#${fSpec})`} />
             </>
           );
         })()}
@@ -416,40 +407,34 @@ export default function HabitPlant({ level, isDormant, sway, habitName }: HabitP
         {level >= 6 && (() => {
           const tip = SB - h;
           const fruits = [
-            { cx: 28, cy: tip - 4,  r: 3.6 },
-            { cx: 52, cy: tip - 2,  r: 3.2 },
-            { cx: 40, cy: tip + 5,  r: 3.5 },
-            { cx: 22, cy: tip + 4,  r: 2.8 },
-            { cx: 58, cy: tip + 5,  r: 2.8 },
-            { cx: 32, cy: tip + 13, r: 3.2 },
-            { cx: 49, cy: tip + 14, r: 3.0 },
-            { cx: 16, cy: tip + 8,  r: 2.5 },
-            { cx: 64, cy: tip + 9,  r: 2.5 },
+            { cx: 30, cy: tip + 2, r: 3.5 },
+            { cx: 50, cy: tip + 2, r: 3.5 },
+            { cx: 40, cy: tip + 8, r: 3.5 },
+            { cx: 22, cy: tip + 12, r: 2.8 },
+            { cx: 58, cy: tip + 12, r: 2.8 },
+            { cx: 40, cy: tip - 5, r: 3.0 },
           ];
           return (
             <>
-              {/* Ground-sweeping branches */}
-              <Branch d={`M 40 ${SB-h*0.12} C 22 ${SB-h*0.20} 8  ${SB-h*0.10} 3  ${SB}`} w={2.8} />
-              <Branch d={`M 40 ${SB-h*0.12} C 58 ${SB-h*0.20} 72 ${SB-h*0.10} 77 ${SB}`} w={2.8} />
+              {/* Compact base branches */}
+              <Branch d={`M 40 ${SB-h*0.15} C 25 ${SB-h*0.25} 12 ${SB-h*0.15} 8 ${SB-h*0.05}`} w={2.8} />
+              <Branch d={`M 40 ${SB-h*0.15} C 55 ${SB-h*0.25} 68 ${SB-h*0.15} 72 ${SB-h*0.05}`} w={2.8} />
 
-              <Leaf cx={2}  cy={SB} rx={14} ry={6.5} rot={-6} grad={gLeafD} />
-              <Leaf cx={78} cy={SB} rx={14} ry={6.5} rot={6}  grad={gLeafL} />
+              <Leaf cx={8} cy={SB-h*0.05} rx={12} ry={6} rot={-6} grad={gLeafD} />
+              <Leaf cx={72} cy={SB-h*0.05} rx={12} ry={6} rot={6} grad={gLeafL} />
 
-              {/* Enormous layered canopy */}
-              <Leaf cx={40} cy={tip+12} rx={30} ry={22}  grad={gLeafD} op={0.82} />
-              <Leaf cx={18} cy={tip+10} rx={20} ry={15}  rot={-5}  grad={gLeafL} />
-              <Leaf cx={62} cy={tip+10} rx={20} ry={15}  rot={5}   grad={gLeafD} />
-              <Leaf cx={40} cy={tip+3}  rx={24} ry={18}  grad={gLeafL} />
-              <Leaf cx={40} cy={tip-8}  rx={19} ry={14}  grad={gLeafL} />
-              <Leaf cx={40} cy={tip-19} rx={14} ry={10}  grad={gLeafL} />
-              <Leaf cx={40} cy={tip-27} rx={9}  ry={7}   grad={gLeafL} />
-              <Leaf cx={40} cy={tip-33} rx={5.5} ry={4}  grad={gLeafL} />
+              {/* Neat, compact majestic canopy */}
+              <Leaf cx={40} cy={tip+15} rx={26} ry={20} grad={gLeafD} op={0.85} />
+              <Leaf cx={22} cy={tip+15} rx={16} ry={12} rot={-5} grad={gLeafL} />
+              <Leaf cx={58} cy={tip+15} rx={16} ry={12} rot={5} grad={gLeafD} />
+              <Leaf cx={40} cy={tip+5} rx={20} ry={15} grad={gLeafL} />
+              <Leaf cx={40} cy={tip-8} rx={16} ry={12} grad={gLeafL} />
+              <Leaf cx={40} cy={tip-20} rx={10} ry={8} grad={gLeafL} />
+              
               {/* SS scatter */}
-              <Leaf cx={40} cy={tip+12} rx={30} ry={22}  grad={gLeafSS} op={0.15} />
+              <Leaf cx={40} cy={tip+15} rx={26} ry={20} grad={gLeafSS} op={0.15} />
               {/* Specular hotspot */}
-              <ellipse cx={35} cy={tip-12} rx={8.5} ry={5.5} fill={C.leafHL} opacity={0.32} filter={`url(#${fSpec})`} />
-              {/* Rim lighting */}
-              <ellipse cx={40} cy={tip+33} rx={30} ry={5} fill={C.leafC} opacity={0.07} />
+              <ellipse cx={36} cy={tip-8} rx={7} ry={5} fill={C.leafHL} opacity={0.3} filter={`url(#${fSpec})`} />
 
               {/* ── Fruits ── */}
               {fruits.map((f, i) =>

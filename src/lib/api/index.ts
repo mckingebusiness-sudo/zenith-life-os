@@ -1,5 +1,4 @@
 // Central API exports for easy imports
-export * from "./habits";
 export * from "./tasks";
 export * from "./finance";
 export * from "./notes";

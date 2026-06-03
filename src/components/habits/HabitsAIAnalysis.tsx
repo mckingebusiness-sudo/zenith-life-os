@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Brain, Sparkles, Loader2 } from "lucide-react";
+import { Brain, AlertTriangle, Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { getLocalDateString } from "@/lib/habitCalculations";
 import { generateMoodAnalysis } from "@/lib/gemini";
 import { supabase } from "@/lib/supabase";
+import { getAiAnalysisDataset } from "@/lib/habitAnalyticsEngine";
 
 export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], monthlyData: any[] }) {
   const [analysis, setAnalysis] = useState<any>(null);
@@ -10,7 +12,7 @@ export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], month
 
   // Derive a stable hash to prevent redundant AI calls on every React Query refetch
   const habitsHash = useMemo(() => {
-    return habits.map(h => `${h.id}-${h.streak?.current_streak}-${h.is_completed}`).join('|');
+    return habits.map(h => `${h.id}-${h.streak?.current_streak}-${!!h.checkedToday}-${!!h.frozenToday}`).join('|');
   }, [habits]);
 
   useEffect(() => {
@@ -21,7 +23,7 @@ export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], month
       const { data: authData } = await supabase.auth.getSession();
       
       if (authData.session) {
-        const todayLocal = new Intl.DateTimeFormat("en-CA").format(new Date());
+        const todayLocal = getLocalDateString();
         const { data: moodData } = await supabase
           .from('daily_moods')
           .select('mood')
@@ -34,14 +36,21 @@ export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], month
         }
       }
 
+      const dataset = getAiAnalysisDataset(habits);
       const data = {
-        habits: habits.map(h => ({ title: h.title, streak: h.streak?.current_streak, completed: h.is_completed })),
+        ...dataset,
         moodStats: moodStr
       };
       
-      const result = await generateMoodAnalysis(data);
-      setAnalysis(result);
-      setIsLoading(false);
+      try {
+        const result = await generateMoodAnalysis(data);
+        setAnalysis(result);
+      } catch (error) {
+        console.error("Failed to generate AI analysis:", error);
+        setAnalysis(null);
+      } finally {
+        setIsLoading(false);
+      }
     }
 
     fetchAnalysis();

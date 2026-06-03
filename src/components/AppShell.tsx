@@ -5,7 +5,6 @@ import BackgroundFX from "./BackgroundFX";
 import AIPanel, { AITrigger } from "./AIFloatingButton";
 import { useDirection } from "@/stores/useDirection";
 import { useHabits } from "@/hooks/useHabits";
-import { toast } from "sonner";
 
 // ─── AppShell ──────────────────────────────────────────────────────────────
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -97,21 +96,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
             open={aiOpen}
             onClose={() => setAiOpen(false)}
             onAddHabit={async (habit) => {
-              try {
-                const res = await addHabitAsync({
-                  title: habit.title,
-                  icon: habit.icon,
-                  color: habit.color,
-                  cadence: "daily",
-                  target_per_period: 1,
-                  sort_order: 0,
-                  habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
-                });
-                alert("DEBUG SUCCESS: " + JSON.stringify(res));
-              } catch (e: any) {
-                alert("خطأ أثناء الحفظ في الداتا بيز: " + (e.message || JSON.stringify(e)));
-                throw e;
-              }
+              await addHabitAsync({
+                title: habit.title,
+                icon: habit.icon,
+                color: habit.color,
+                cadence: "daily",
+                target_per_period: 1,
+                sort_order: 0,
+                habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
+              });
             }}
             onDeleteHabit={async (id) => {
               await deleteHabit(id);

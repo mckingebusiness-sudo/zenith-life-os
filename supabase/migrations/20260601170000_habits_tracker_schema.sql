@@ -87,20 +87,13 @@ create table if not exists public.monthly_recoveries (
   unique (user_id, month_local)
 );
 
-create table if not exists public.habit_templates (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  name text not null,
-  habits jsonb not null default '[]'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+
 
 create index if not exists habits_user_sort_idx on public.habits(user_id, is_deleted, sort_order);
 create index if not exists habit_checkins_habit_day_idx on public.habit_checkins(habit_id, day_local);
 create index if not exists habit_freezes_habit_day_idx on public.habit_freezes(habit_id, freeze_day);
 create index if not exists habit_relapses_habit_day_idx on public.habit_relapses(habit_id, day_local);
-create index if not exists habit_templates_user_created_idx on public.habit_templates(user_id, created_at desc);
+
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -122,10 +115,7 @@ create trigger habit_journals_touch_updated_at
 before update on public.habit_journals
 for each row execute function public.touch_updated_at();
 
-drop trigger if exists habit_templates_touch_updated_at on public.habit_templates;
-create trigger habit_templates_touch_updated_at
-before update on public.habit_templates
-for each row execute function public.touch_updated_at();
+
 
 create or replace function public.recalculate_habit_streak(target_habit_id uuid)
 returns void
@@ -295,7 +285,7 @@ alter table public.habit_relapses enable row level security;
 alter table public.habit_streaks enable row level security;
 alter table public.habit_journals enable row level security;
 alter table public.monthly_recoveries enable row level security;
-alter table public.habit_templates enable row level security;
+
 
 create policy "Users manage own habits" on public.habits
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -311,5 +301,4 @@ create policy "Users manage own habit journals" on public.habit_journals
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users manage own monthly recoveries" on public.monthly_recoveries
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "Users manage own habit templates" on public.habit_templates
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+

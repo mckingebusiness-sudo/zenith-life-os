@@ -29,6 +29,20 @@
 
 import type { HabitWithStreak } from "@/hooks/useHabits";
 
+export const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** Standardized way to get YYYY-MM-DD in the user's local timezone */
+export function getLocalDateString(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(date);
+}
+
+/** Check if a habit existed on a specific date (created_at exclusion rule) */
+export function habitExistsOnDate(habit: HabitWithStreak, dateStr: string): boolean {
+  if (!habit.created_at) return true; // assume always existed if missing
+  const createdStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date(habit.created_at));
+  return dateStr >= createdStr;
+}
+
 // ─── Core: Is a habit "handled" (success OR frozen) for a given day? ─────────
 
 /** Check if a GOOD habit is handled on a specific day */
@@ -42,9 +56,21 @@ export function isQuitHabitHandled(habit: HabitWithStreak, dateStr: string): boo
   if (habit.freezes?.has(dateStr)) return true;  // frozen = handled
   if (habit.checkins?.has(dateStr)) return true; // explicit success
 
-  // No explicit check-in and no freeze = NOT handled
-  // We do NOT auto-succeed past days — the user must confirm avoidance.
-  return false;
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
+  
+  if (dateStr === todayStr) {
+    // For today, it is pending until explicit check-in (or freeze)
+    return false;
+  }
+
+  // For past days, if there's a relapse, it failed.
+  if (habit.relapses?.has(dateStr)) return false;
+  
+  // If no relapse on a past day, it auto-succeeds (avoided)
+  // BUT only if the habit actually existed then.
+  return habitExistsOnDate(habit, dateStr);
+  
+  return true;
 }
 
 /** Check if ANY habit is handled on a specific day */
@@ -58,8 +84,16 @@ export function isHabitSuccessOnDay(habit: HabitWithStreak, dateStr: string): bo
   if (habit.freezes?.has(dateStr)) return false;  // frozen is not "success", it's excused
   
   if (habit.habit_type === 'quit') {
-    // Quit habits require explicit check-in to count as success
-    return !!habit.checkins?.has(dateStr);
+    if (habit.checkins?.has(dateStr)) return true;
+    
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(new Date());
+    if (dateStr === todayStr) return false;
+    
+    if (habit.relapses?.has(dateStr)) return false;
+    
+    if (habit.relapses?.has(dateStr)) return false;
+    
+    return habitExistsOnDate(habit, dateStr);
   }
   
   return !!habit.checkins?.has(dateStr);
@@ -142,11 +176,7 @@ export function calculateDayProgress(
   }
 
   // Filter habits to only those that existed on the given date
-  const habitsOnDate = habits.filter(h => {
-    if (!h.created_at) return true; // no created_at → assume always existed
-    const createdStr = new Intl.DateTimeFormat("en-CA").format(new Date(h.created_at));
-    return dateStr >= createdStr;
-  });
+  const habitsOnDate = habits.filter(h => habitExistsOnDate(h, dateStr));
 
   const goodHabits = habitsOnDate.filter(h => h.habit_type !== 'quit');
   const badHabits = habitsOnDate.filter(h => h.habit_type === 'quit');

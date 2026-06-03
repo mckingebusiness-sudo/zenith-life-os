@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getLocalDateString } from "@/lib/habitCalculations";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -20,7 +21,7 @@ export interface HabitReward {
   created_at: string;
 }
 
-const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 
 export function useDailyMoods(year: number, month: number) {
   const qc = useQueryClient();
@@ -35,8 +36,8 @@ export function useDailyMoods(year: number, month: number) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0);
 
-      const startStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(startDate);
-      const endStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(endDate);
+      const startStr = getLocalDateString(startDate);
+      const endStr = getLocalDateString(endDate);
 
       const { data, error } = await supabase
         .from("daily_moods")

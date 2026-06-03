@@ -126,8 +126,8 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
       // Add optional fields safely (only if they exist in DB schema)
       
       if (savedValuePerDay) {
-        try { habitData['saved_value_per_day'] = Number(savedValuePerDay); } catch {}
-        try { habitData['saved_unit'] = savedUnit || undefined; } catch {}
+        habitData['saved_value_per_day'] = Number(savedValuePerDay);
+        habitData['saved_unit'] = savedUnit || undefined;
       }
 
       await onSave(habitData as any);
@@ -355,27 +355,6 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                 </AnimatePresence>
               </div>
 
-              {/* Apple Health Mockup Integration */}
-              {habitType === 'good' && (
-                <div className="pt-2">
-                  <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الربط مع التطبيقات (تجريبي)</label>
-                  <div className="flex items-center justify-between bg-black/40 border border-white/5 rounded-2xl px-5 py-4 cursor-pointer hover:bg-white/5 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-lg">
-                        <span className="text-red-500 font-bold text-xl">❤️</span>
-                      </div>
-                      <div>
-                        <div className="text-white text-sm font-bold">Apple Health</div>
-                        <div className="text-white/40 text-xs mt-0.5">إكمال تلقائي بعد 8000 خطوة</div>
-                      </div>
-                    </div>
-                    {/* Toggle mock */}
-                    <div className="w-12 h-7 bg-white/10 rounded-full relative transition">
-                      <div className="w-5 h-5 bg-white/50 rounded-full absolute left-1 top-1 shadow-sm"></div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Buttons */}
               <div className="flex gap-4 pt-4 pb-2">
@@ -396,7 +375,10 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                   }}
                 >
                   {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      جاري الحفظ...
+                    </>
                   ) : (
                     <>
                       <Sparkles size={18} className="opacity-80" />

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { Infinity as InfinityIcon, X, Send, GripVertical, Brain, BarChart3, Trash2, RefreshCw, Sparkles, AppWindow, PanelRight } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
+import { supabase } from "@/lib/supabase";
 
 // ─── AITrigger ──────────────────────────────────────────────────────────────
 export function AITrigger({ onClick, side = "right" }: { onClick: () => void; side?: "left" | "right" }) {
@@ -239,7 +240,7 @@ function parseAIActions(text: string): { cleanText: string; actions: ParsedActio
   const actions: ParsedAction[] = [];
   let cleanText = text;
 
-  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{.*?\})/gi;
+  const actionRegex = /\[ACTION_(ADD|DELETE|UPDATE)\]\s*(\{[\s\S]*?\})/gi;
   let match;
 
   while ((match = actionRegex.exec(text)) !== null) {
@@ -366,7 +367,7 @@ const BASE_SYSTEM_PROMPT = `أنت "زينيث AI" (Zenith AI)، مساعد مت
 - الألوان المتاحة: green, blue, red, orange, amber, yellow, lime, emerald, teal, cyan, sky, indigo, violet, purple, fuchsia, pink, rose, slate, gray, brown.
 - لا تعرض الـ JSON أو الـ id للمستخدم أبداً. اكتب ردك الطبيعي أولاً ثم ضع سطر الإجراء في النهاية.`;
 
-const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
+// API key is now server-side only (Supabase Edge Function)
 
 const SUGGESTIONS = [
   "حلل أدائي هذا الشهر",
@@ -479,7 +480,10 @@ export default function AIPanel({
     setTimeout(() => setToast(null), 3500);
   };
 
-  const executeActions = async (actions: ParsedAction[]) => {
+  const executeActions = async (actions: ParsedAction[]): Promise<{ success: boolean; completed: string[]; errors: string[] }> => {
+    const completed: string[] = [];
+    const errors: string[] = [];
+    
     for (const action of actions) {
       try {
         if (action.type === "add_habit" && onAddHabit && action.data) {
@@ -489,24 +493,22 @@ export default function AIPanel({
             color: String(action.data.color || "green"),
             habit_type: String(action.data.habit_type || "good"),
           });
-          showToast(`✅ تمت إضافة: ${action.data.title}`);
+          completed.push(`✅ تمت إضافة: ${action.data.title}`);
           await new Promise(resolve => setTimeout(resolve, 400));
         }
         if (action.type === "delete_habit" && onDeleteHabit && action.data) {
-          // Try by ID first, then fallback to title match
           const id = String(action.data.id || "");
           const title = String(action.data.title || "");
           if (id && !id.includes("habit-id")) {
             await onDeleteHabit(id);
-            showToast(`🗑️ تم حذف: ${title || "العادة"}`);
+            completed.push(`🗑️ تم حذف: ${title || "العادة"}`);
           } else if (title) {
-            // Fallback: find by title
             const found = habits.find(h => h.title.toLowerCase().includes(title.toLowerCase()));
             if (found) {
               await onDeleteHabit(found.id);
-              showToast(`🗑️ تم حذف: ${title}`);
+              completed.push(`🗑️ تم حذف: ${title}`);
             } else {
-              showToast(`⚠️ لم أجد عادة باسم: ${title}`);
+              errors.push(`⚠️ لم أجد عادة باسم: ${title}`);
             }
           }
         }
@@ -519,9 +521,8 @@ export default function AIPanel({
             if (updates.icon) cleanUpdates.icon = String(updates.icon);
             if (updates.color) cleanUpdates.color = String(updates.color);
             await onUpdateHabit(id, cleanUpdates);
-            showToast(`✏️ تم تعديل العادة بنجاح`);
+            completed.push(`✏️ تم تعديل العادة بنجاح`);
           } else {
-            // Fallback: try to find by title in updates or data
             const searchTitle = String(updates?.title || action.data.title || "");
             const found = habits.find(h => h.title.toLowerCase().includes(searchTitle.toLowerCase()));
             if (found && updates) {
@@ -530,28 +531,32 @@ export default function AIPanel({
               if (updates.icon) cleanUpdates.icon = String(updates.icon);
               if (updates.color) cleanUpdates.color = String(updates.color);
               await onUpdateHabit(found.id, cleanUpdates);
-              showToast(`✏️ تم تعديل العادة بنجاح`);
+              completed.push(`✏️ تم تعديل العادة بنجاح`);
             } else {
-              showToast(`⚠️ لم أجد العادة للتعديل`);
+              errors.push(`⚠️ لم أجد العادة للتعديل`);
             }
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error("Action failed:", e);
-        showToast(`❌ فشل تنفيذ الإجراء`);
+        errors.push(`❌ فشل تنفيذ الإجراء: ${e?.message || 'خطأ غير معروف'}`);
       }
     }
+    
+    return {
+      success: errors.length === 0,
+      completed,
+      errors,
+    };
   };
 
   const callMistral = async (msgs: ChatMessage[], contextOverride?: string) => {
     const ctx = buildHabitsContext(habits);
 
-    // قائمة العادات مع الـ IDs الحقيقية — ضرورية للتعديل والحذف
     const habitsListForAI = ctx.habits.map(h => 
       `- id: "${h.id}" | الاسم: "${h.title}" | الأيقونة: ${h.icon} | اللون: ${h.color} | النوع: ${h.habit_type}`
     ).join("\n");
 
-    // سياق غني ومنظم للذكاء الاصطناعي
     const systemWithContext = BASE_SYSTEM_PROMPT + `
 
 [بيانات المستخدم الحية]:
@@ -567,27 +572,28 @@ export default function AIPanel({
 [قائمة العادات الحالية مع الـ IDs]:
 ${habitsListForAI}`;
 
-    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    const prompt = JSON.stringify({
+      system: systemWithContext,
+      messages: msgs.slice(-6).map(m => ({ role: m.role, content: m.content })),
+    });
+
+    // Use Edge Function — API key stays server-side
+    const { data: sessionData } = await supabase.auth.getSession();
+    const jwt = sessionData?.session?.access_token;
+
+    const edgeUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-habits`;
+    const res = await fetch(edgeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${MISTRAL_API_KEY}`,
+        Authorization: `Bearer ${jwt}`,
       },
-      body: JSON.stringify({
-        model: "mistral-large-latest",
-        messages: [
-          { role: "system", content: systemWithContext },
-          ...msgs.slice(-6).map(m => ({ role: m.role, content: m.content })),
-        ],
-        temperature: 0.78,
-        max_tokens: 1200,
-        top_p: 0.92,
-      }),
+      body: JSON.stringify({ prompt, day_local: ctx.currentDate }),
     });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      console.error("Mistral API error:", res.status, errText);
+      console.error("AI API error:", res.status, errText);
       throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
     }
     const data = await res.json();
@@ -624,19 +630,28 @@ ${habitsListForAI}`;
       // تأخير صغير قبل ظهور الرد يخلي الأمر يبدو أكثر طبيعية
       await humanDelay(100, 300);
 
-      setMessages(prev => [...prev, { role: "assistant", content: cleanText || "تم ✅" }]);
+      // Execute actions FIRST, then show message based on result
+      if (actions.length > 0) {
+        const result = await executeActions(actions);
+        
+        let finalMessage = cleanText || "";
+        if (result.success && result.completed.length > 0) {
+          finalMessage = finalMessage || "تم تنفيذ الطلب بنجاح ✅";
+          // Show individual success toasts
+          result.completed.forEach(msg => showToast(msg));
+        } else if (result.errors.length > 0) {
+          // Override AI message with failure notice
+          finalMessage = `حاولت أنفذ الطلب لكن حصلت مشكلة:\n${result.errors.join("\n")}` + 
+            (result.completed.length > 0 ? `\n\nلكن نجح:\n${result.completed.join("\n")}` : "");
+          result.errors.forEach(msg => showToast(msg));
+        }
+        
+        setMessages(prev => [...prev, { role: "assistant", content: finalMessage }]);
+      } else {
+        setMessages(prev => [...prev, { role: "assistant", content: cleanText || "تم ✅" }]);
+      }
       setThinkingPhase(null);
       setIsLoading(false);
-
-      // Execute actions separately — if they fail, the response is already shown
-      if (actions.length > 0) {
-        try {
-          await executeActions(actions);
-        } catch (actionErr: any) {
-          console.error("❌ Action execution failed:", actionErr);
-          toast.error(`حدث خطأ أثناء تنفيذ أمر الذكاء الاصطناعي: ${actionErr?.message || 'خطأ غير معروف'}`);
-        }
-      }
     } catch (err) {
       console.error("❌ AI call failed:", err);
       setThinkingPhase(null);

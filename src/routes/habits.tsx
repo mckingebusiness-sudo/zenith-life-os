@@ -6,17 +6,19 @@ import { HabitModal } from "@/components/habits/HabitModal";
 import { HabitsAnalytics } from "@/components/habits/HabitsAnalytics";
 import HabitsGardenLarge from "@/components/habits/garden/HabitsGardenLarge";
 import { BadHabitsTracker } from "@/components/habits/BadHabitsTracker";
-import { HabitBlueprintsModal } from "@/components/habits/HabitBlueprintsModal";
 import { AITicker } from "@/components/habits/AITicker";
 import { DailyMoodCheckIn } from "@/components/habits/DailyMoodCheckIn";
+import { getLocalDateString } from "@/lib/habitCalculations";
 import { ChevronRight, ChevronLeft, Plus, Calendar, Sparkles, Loader2, LayoutGrid, Download, Bookmark, RefreshCcw, HelpCircle, X, Shield, Flame, Snowflake, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef, Component } from "react";
-import { supabase } from "@/lib/supabase";
+
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+
 import confetti from "canvas-confetti";
+import { usePendingWrites } from "@/stores/usePendingWrites";
 import { useTranslation } from "react-i18next";
+import { Cloud, CloudOff, CloudCog, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/habits")({
   component: HabitsPage,
@@ -56,11 +58,12 @@ class HabitsErrorBoundary extends Component<
 
 function HabitsPage() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
+
+  const dataStatus = usePendingWrites((s: any) => s.getDataStatus());
+  const hasPending = dataStatus === "syncing";
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { habits, isLoading, error, checkIn, addHabit, addHabitAsync, bulkAddHabits, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse } = useHabits(currentDate);
+  const { habits, isLoading, error, checkIn, checkInAsync, addHabit, addHabitAsync, updateHabit, updateHabitAsync, deleteHabit, undeleteHabit, freezeHabit, resetStreak, undoRelapse, bulkAddHabits } = useHabits(currentDate);
   const [burst, setBurst] = useState<string | null>(null);
-  const [isBlueprintsOpen, setIsBlueprintsOpen] = useState(false);
   const confettiFiredRef = useRef<string | null>(null);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -85,7 +88,7 @@ function HabitsPage() {
     const progress = calculateTodayProgress(habits);
     const pct = progress.percentage;
     
-    const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
+    const todayStr = getLocalDateString();
     const key = `confetti_fired_${todayStr}`;
     if (pct === 100 && confettiFiredRef.current !== todayStr && !localStorage.getItem(key)) {
       confettiFiredRef.current = todayStr;
@@ -99,21 +102,26 @@ function HabitsPage() {
     }
   }, [habits, currentDate]);
 
-  const handleCheckIn = (id: string, dayLocal?: string, action?: "check" | "uncheck") => {
-    checkIn(id, dayLocal, action);
+  const handleCheckIn = async (id: string, dayLocal?: string, action?: "check" | "uncheck") => {
     if (action === "check" || !action) {
-      setBurst(`${id}-${dayLocal || new Intl.DateTimeFormat("en-CA").format(new Date())}`);
+      setBurst(`${id}-${dayLocal || getLocalDateString()}`);
       setTimeout(() => setBurst(null), 500);
+    }
+    try {
+      await checkInAsync(id, dayLocal, action);
+    } catch {
+      // Rollback handled by onError in useHabits — just show feedback
+      toast.error("فشل تسجيل الإنجاز، حاول مرة أخرى");
     }
   };
 
   // Awaits the actual DB save so the modal loading state is accurate
   const handleSaveHabit = async (habitData: Partial<Habit>): Promise<void> => {
     if (editingHabit) {
-      // Fire-and-forget: optimistic update happens in onMutate, modal closes immediately
-      updateHabit(editingHabit.id, habitData);
+      // Await so the modal stays open until DB confirms save
+      await updateHabitAsync(editingHabit.id, habitData);
     } else {
-      addHabit(habitData);
+      await addHabitAsync(habitData);
     }
   };
 
@@ -138,7 +146,7 @@ function HabitsPage() {
 
   const handleGenerateDummies = async () => {
     try {
-      const dummyHabits = [
+      const dummyHabits: Partial<Habit>[] = [
         { title: "القراءة لمدة 20 دقيقة", icon: "📚", color: "blue", cadence: "daily", target_per_period: 1, sort_order: 1 },
         { title: "شرب 3 لتر ماء", icon: "💧", color: "cyan", cadence: "daily", target_per_period: 1, sort_order: 2 },
         { title: "المشي 10 آلاف خطوة", icon: "🚶‍♂️", color: "green", cadence: "daily", target_per_period: 1, sort_order: 3 },
@@ -151,21 +159,8 @@ function HabitsPage() {
         { title: "الامتنان", icon: "🙏", color: "rose", cadence: "daily", target_per_period: 1, sort_order: 10 },
       ];
 
-      const { data: authData } = await supabase.auth.getSession();
-      if (!authData.session) throw new Error("Not logged in");
-      const userId = authData.session.user.id;
-
-      const habitsToInsert = dummyHabits.map(h => ({
-        ...h,
-        user_id: userId,
-        active_weekdays: [0, 1, 2, 3, 4, 5, 6],
-        grace_days: 0,
-        is_private: false
-      }));
-
-      await supabase.from("habits").insert(habitsToInsert);
-      const monthStr = new Intl.DateTimeFormat("en-CA").format(currentDate).slice(0, 7);
-      qc.invalidateQueries({ queryKey: ["habits", monthStr] });
+      await bulkAddHabits(dummyHabits);
+      toast.success("تم إضافة العادات بنجاح");
     } catch (err) {
       console.error(err);
       toast.error("حدث خطأ في إضافة العادات");
@@ -202,7 +197,7 @@ function HabitsPage() {
           {error.message}
         </pre>
         <button
-          onClick={() => qc.invalidateQueries({ queryKey: ["habits"] })}
+          onClick={() => window.location.reload()}
           className="px-6 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl transition text-white/70 text-sm"
         >
           إعادة المحاولة
@@ -214,6 +209,20 @@ function HabitsPage() {
   return (
     <HabitsErrorBoundary>
       <div className="space-y-8 max-w-[1600px] mx-auto px-4 lg:px-8 pb-16">
+        {/* ─── Saving Indicator ─── */}
+        <AnimatePresence>
+          {hasPending && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-center gap-2 py-2 bg-amber-500/90 backdrop-blur-md text-black text-sm font-bold shadow-lg"
+            >
+              <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+              جاري الحفظ... لا تغلق الصفحة
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* ─── Top Header ─── */}
         <div className="print:hidden">
           <motion.div
@@ -252,6 +261,28 @@ function HabitsPage() {
             </div>
 
             <div className="relative flex items-center gap-4 w-full sm:w-auto">
+              {/* ─── Data Confidence Indicator ─── */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 text-xs font-medium backdrop-blur-md">
+                {dataStatus === "syncing" && (
+                  <>
+                    <CloudCog className="w-4 h-4 text-amber-400 animate-spin" />
+                    <span className="text-amber-400">جاري المزامنة...</span>
+                  </>
+                )}
+                {dataStatus === "confirmed" && (
+                  <>
+                    <Cloud className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">تم الحفظ</span>
+                  </>
+                )}
+                {dataStatus === "error" && (
+                  <>
+                    <CloudOff className="w-4 h-4 text-red-400" />
+                    <span className="text-red-400">خطأ في الاتصال</span>
+                  </>
+                )}
+              </div>
+
               {/* Month Navigation */}
               <div className="flex items-center gap-1 bg-black/50 p-1.5 rounded-2xl border border-white/5 backdrop-blur-md shadow-inner flex-1 sm:flex-none justify-between sm:justify-start">
                 <button
@@ -272,15 +303,6 @@ function HabitsPage() {
                 </button>
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setIsBlueprintsOpen(true)}
-                className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white/5 hover:bg-white/10 text-white rounded-2xl border border-white/10 transition-all font-bold"
-              >
-                <Sparkles size={18} className="text-yellow-400" />
-                <span className="hidden sm:inline">قوالب جاهزة</span>
-              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.98 }}
@@ -478,11 +500,6 @@ function HabitsPage() {
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveHabit}
           habit={editingHabit}
-        />
-        <HabitBlueprintsModal
-          isOpen={isBlueprintsOpen}
-          onClose={() => setIsBlueprintsOpen(false)}
-          bulkAddHabits={bulkAddHabits}
         />
       </div>
     </HabitsErrorBoundary>
