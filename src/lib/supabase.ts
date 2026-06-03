@@ -8,7 +8,7 @@ const isBrowser = typeof window !== "undefined";
 
 const customFetch = async (url: RequestInfo | URL, options?: RequestInit) => {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  const id = setTimeout(() => controller.abort(), 15000); // 15s timeout (raised from 8s for larger historical payloads on slow connections)
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
     return response;

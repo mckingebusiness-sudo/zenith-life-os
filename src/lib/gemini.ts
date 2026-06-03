@@ -3,10 +3,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Mistral API as reliable fallback when Gemini key is not configured
-const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
+// Mistral API as reliable fallback when Gemini key is not configured.
+// SECURITY: never hardcode the key in the client bundle. Provide it via
+// VITE_MISTRAL_API_KEY in your .env / .env.local (and in your deploy env).
+const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY || "";
 
 async function callMistralAPI(prompt: string, responseFormat?: "json"): Promise<string> {
+  if (!MISTRAL_API_KEY) {
+    throw new Error("Mistral API key is not configured (VITE_MISTRAL_API_KEY).");
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);
   
