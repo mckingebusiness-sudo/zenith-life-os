@@ -4,6 +4,10 @@ import { toast } from "sonner";
 
 const KEY = ["habits"];
 
+// Helper: delayed invalidation to avoid race conditions with DB triggers.
+// onSuccess already wrote the real data to cache; this is a safety-net refetch.
+const REFETCH_DELAY_MS = 1500;
+
 // Freezes are now tracked via 'habit_freezes' table in Supabase.
 // Relapse logs are now tracked via 'habit_relapses' table in Supabase.
 
@@ -407,10 +411,9 @@ export function useHabits(currentDate: Date = new Date()) {
       // ✅ FIX: rollback key mismatch — onMutate returns { prev }, not { previousHabits }
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
-    // ✅ FIX: targeted, non-blocking invalidation so the mutation settles immediately.
-    // Returning the promise kept the mutation pending until the refetch → infinite loading.
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey });
+      // Delayed refetch: gives DB triggers time to finish before re-querying
+      setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS);
     },
     retry: 0,
   });
@@ -545,7 +548,7 @@ export function useHabits(currentDate: Date = new Date()) {
     // keeps addHabit.mutateAsync pending until the background refetch settles, which freezes
     // the modal in an infinite loading spinner. onSuccess already wrote the real row to cache.
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey });
+      setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS);
     },
     retry: 0,
   });
@@ -646,7 +649,7 @@ export function useHabits(currentDate: Date = new Date()) {
     // ✅ FIX: targeted + non-blocking invalidation so updateHabit.mutateAsync settles
     // immediately (returning the promise froze edits — e.g. color change — in infinite loading).
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey });
+      setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS);
     },
     retry: 0,
   });
@@ -676,7 +679,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey });
+      setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS);
     },
     retry: 0,
   });
@@ -704,7 +707,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey });
+      setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS);
     },
     retry: 0,
   });
@@ -744,7 +747,7 @@ export function useHabits(currentDate: Date = new Date()) {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
     },
-    onSettled: () => { void qc.invalidateQueries({ queryKey }); },
+    onSettled: () => { setTimeout(() => { void qc.invalidateQueries({ queryKey }); }, REFETCH_DELAY_MS); },
   });
 
   const resetStreak = async (habitId: string, reason: string) => {
