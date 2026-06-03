@@ -39,12 +39,22 @@ export function isGoodHabitHandled(habit: HabitWithStreak, dateStr: string): boo
 /** Check if a QUIT habit is handled on a specific day */
 export function isQuitHabitHandled(habit: HabitWithStreak, dateStr: string): boolean {
   if (habit.freezes?.has(dateStr)) return true;  // frozen = handled
+  if (habit.checkins?.has(dateStr)) return true; // explicit success
+
   if (habit.created_at) {
     const created = new Date(habit.created_at);
-    const createdStr = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, '0')}-${String(created.getDate()).padStart(2, '0')}`;
+    // Use proper timezone formatting to avoid UTC vs Local day shift issues
+    const createdStr = new Intl.DateTimeFormat("en-CA").format(created);
     if (dateStr < createdStr) return false;      // Habit didn't exist yet
   }
-  return !habit.relapses?.has(dateStr);           // no relapse = handled
+
+  // Midnight effect fix: Do not auto-succeed for the current day
+  const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
+  if (dateStr === todayStr) {
+    return false; // Must be explicitly checked today
+  }
+
+  return !habit.relapses?.has(dateStr);           // past day without relapse = handled
 }
 
 /** Check if ANY habit is handled on a specific day */
@@ -56,7 +66,25 @@ export function isHabitHandledOnDay(habit: HabitWithStreak, dateStr: string): bo
 /** Check if a habit was a pure "success" (not frozen) on a specific day */
 export function isHabitSuccessOnDay(habit: HabitWithStreak, dateStr: string): boolean {
   if (habit.freezes?.has(dateStr)) return false;  // frozen is not "success", it's excused
-  if (habit.habit_type === 'quit') return !habit.relapses?.has(dateStr);
+  
+  if (habit.habit_type === 'quit') {
+    if (habit.checkins?.has(dateStr)) return true; // explicitly checked
+    
+    if (habit.created_at) {
+      const created = new Date(habit.created_at);
+      const createdStr = new Intl.DateTimeFormat("en-CA").format(created);
+      if (dateStr < createdStr) return false;      // Habit didn't exist yet
+    }
+    
+    // Do not auto-succeed for the current day
+    const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
+    if (dateStr === todayStr) {
+      return false; // Requires explicit input
+    }
+    
+    return !habit.relapses?.has(dateStr);
+  }
+  
   return !!habit.checkins?.has(dateStr);
 }
 
@@ -65,7 +93,8 @@ export function isHabitSuccessOnDay(habit: HabitWithStreak, dateStr: string): bo
 /** Is a habit handled TODAY? (success or frozen) */
 export function isHabitHandledToday(habit: HabitWithStreak): boolean {
   if (habit.frozenToday) return true;
-  if (habit.habit_type === 'quit') return !habit.relapsedToday;
+  // Quit habits must be explicitly checked today to be considered "handled" today
+  if (habit.habit_type === 'quit') return !!habit.checkedToday;
   return !!habit.checkedToday;
 }
 

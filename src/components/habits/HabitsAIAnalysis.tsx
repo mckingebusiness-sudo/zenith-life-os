@@ -1,18 +1,42 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Brain, Sparkles, Loader2 } from "lucide-react";
 import { generateMoodAnalysis } from "@/lib/gemini";
+import { supabase } from "@/lib/supabase";
 
 export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], monthlyData: any[] }) {
   const [analysis, setAnalysis] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Derive a stable hash to prevent redundant AI calls on every React Query refetch
+  const habitsHash = useMemo(() => {
+    return habits.map(h => `${h.id}-${h.streak?.current_streak}-${h.is_completed}`).join('|');
+  }, [habits]);
+
   useEffect(() => {
     async function fetchAnalysis() {
       setIsLoading(true);
+      
+      let moodStr = "Not recorded today";
+      const { data: authData } = await supabase.auth.getSession();
+      
+      if (authData.session) {
+        const todayLocal = new Intl.DateTimeFormat("en-CA").format(new Date());
+        const { data: moodData } = await supabase
+          .from('daily_moods')
+          .select('mood')
+          .eq('user_id', authData.session.user.id)
+          .eq('day_local', todayLocal)
+          .single();
+          
+        if (moodData) {
+          moodStr = moodData.mood;
+        }
+      }
+
       const data = {
         habits: habits.map(h => ({ title: h.title, streak: h.streak?.current_streak, completed: h.is_completed })),
-        moodStats: localStorage.getItem("zenith_today_mood") || "Not recorded today"
+        moodStats: moodStr
       };
       
       const result = await generateMoodAnalysis(data);
@@ -21,7 +45,7 @@ export function HabitsAIAnalysis({ habits, monthlyData }: { habits: any[], month
     }
 
     fetchAnalysis();
-  }, [habits]);
+  }, [habitsHash]);
 
   if (isLoading) {
     return (

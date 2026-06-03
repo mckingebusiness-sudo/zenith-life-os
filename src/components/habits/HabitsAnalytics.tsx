@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { HabitWithStreak } from "@/hooks/useHabits";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell, Legend } from "recharts";
 import { Flame, Target, Trophy, TrendingUp, Calendar, Sparkles, BarChart3, Brain, Shield, Printer, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { PrintableReport } from "./PrintableReport";
 import { calculateDayProgress } from "@/lib/habitCalculations";
 import { HabitsAIAnalysis } from "./HabitsAIAnalysis";
+import { generateComplexAnalyticsReport } from "@/lib/gemini";
 
 type Props = {
   habits: HabitWithStreak[];
@@ -27,6 +28,19 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   const [isExporting, setIsExporting] = useState(false);
   const [showMoreMonths, setShowMoreMonths] = useState(false);
   const [showFullMonth, setShowFullMonth] = useState(false);
+
+  useEffect(() => {
+    const loadCachedReport = async () => {
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) return;
+      const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      const cached = localStorage.getItem(`zenith_ai_report_${authData.session.user.id}_${today}`);
+      if (cached) {
+        setAiInsight(cached);
+      }
+    };
+    loadCachedReport();
+  }, []);
 
   const daysInMonth = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -144,13 +158,13 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   }, [monthlyData]);
 
   const totalCheckinsThisMonth = useMemo(() => {
-    return monthlyData.reduce((sum: number, d: any) => sum + d.الإنجاز, 0);
+    return monthlyData.reduce((sum: number, d: any) => sum + (d.الإنجاز || 0), 0);
   }, [monthlyData]);
 
   const averageCompletion = useMemo(() => {
-    const validDays = monthlyData.filter((d: any) => d.الإنجاز > 0 || new Date(d.dateStr) <= new Date());
+    const validDays = monthlyData.filter((d: any) => (d.الإنجاز || 0) > 0 || new Date(d.dateStr) <= new Date());
     if (validDays.length === 0) return 0;
-    return Math.round(validDays.reduce((s: number, d: any) => s + d.percentage, 0) / validDays.length);
+    return Math.round(validDays.reduce((s: number, d: any) => s + (d.percentage || 0), 0) / validDays.length);
   }, [monthlyData]);
 
   const stats = useMemo(() => [
@@ -180,9 +194,9 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
                     const bestHabit = habits.find((h: any) => h.streak?.current_streak === 0 && h.streak?.longest_streak > 5);
                     if (bestHabit) {
                       await supabase.from("habit_checkins").insert({ habit_id: bestHabit.id, user_id: authData.session.user.id, day_local: yStr });
+                      const monthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+                      await supabase.from("monthly_recoveries").insert({ user_id: authData.session.user.id, month_local: monthStr, recovered_habit_id: bestHabit.id });
                     }
-                    const key = `recovery_${new Date().getFullYear()}_${new Date().getMonth()}`;
-                    localStorage.setItem(key, "1");
                     setRecoveryUsed(true);
                     toast.success("تم استرداد السلسلة بنجاح!");
                   } finally {
@@ -229,23 +243,16 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
 
   const monthsStats = useMemo(() => {
     const realNow = new Date();
-    // Compare based on the selected month 'currentDate'
     const isOngoing = currentDate.getFullYear() === realNow.getFullYear() && currentDate.getMonth() === realNow.getMonth();
-    const limitDayNum = isOngoing ? realNow.getDate() : new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-
-        const list = [];
     
     const calculateMonth = (targetDate: Date, limitToRealCurrentDay: boolean) => {
         const y = targetDate.getFullYear();
         const m = targetDate.getMonth();
         const maxDays = new Date(y, m + 1, 0).getDate();
-        // If we are looking at past months, we still compare them up to the current day in the current month to make a fair comparison
         const limit = limitToRealCurrentDay ? Math.min(realNow.getDate(), maxDays) : maxDays;
         
         let limitedScore = 0;
         let totalScore = 0;
-        const goodHabits = habits.filter(h => h.habit_type !== 'quit');
-        const badHabits = habits.filter(h => h.habit_type === 'quit');
 
         for (let i = 1; i <= maxDays; i++) {
             const mm = String(m + 1).padStart(2, "0");
@@ -256,7 +263,6 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
             const { totalSuccess: dayScore } = calculateDayProgress(habits, str, isFuture);
             
             totalScore += dayScore;
-            // When calculating limited score for fair comparison, we use the realNow.getDate() as limit
             if (i <= limit) {
                 limitedScore += dayScore;
             }
@@ -272,6 +278,7 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
         };
     };
 
+    const list = [];
     if (isOngoing) {
         list.push(calculateMonth(realNow, true));
         for(let i=1; i<=5; i++) {
@@ -293,81 +300,116 @@ export function HabitsAnalytics({ habits, currentDate, onRecoverStreak }: Props)
   const maxScore = useMemo(() => Math.max(...monthsStats.map(m => m.limitedScore), 1), [monthsStats]);
 
   const generateAIReport = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const limitKey = `analytics_limit_${today}`;
-    const count = parseInt(localStorage.getItem(limitKey) || "0", 10);
-    
-    if (count >= 2) {
-      toast.error("لقد استنفدت الحد المسموح للتحليل اليوم (مرتين). حاول غداً!", { style: { background: '#333', color: '#fff' } });
-      return;
-    }
-
     if (aiLoading) return;
     setAiLoading(true);
     setAiError(false);
 
-    const selectedMonthName = currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
-    const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() &&
-      currentDate.getFullYear() === new Date().getFullYear();
+    try {
+      // Force loading state off after 70 seconds no matter what
+      setTimeout(() => {
+        setAiLoading(false);
+      }, 70000);
 
-    const ctx = JSON.stringify(monthsStats.slice(0, 6).map(m => ({
-      name: m.name,
-      limitedScore: m.limitedScore,
-      totalScore: m.totalScore,
-      limitDay: m.limitDay,
-      isRealCurrent: m.isRealCurrent
-    })));
+      const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) {
+        toast.error("يرجى تسجيل الدخول أولاً لاستخدام الذكاء الاصطناعي");
+        setAiLoading(false);
+        return;
+      }
+      
+      // Check usage
+      const { data: usageData, error: usageError } = await supabase
+        .from('daily_ai_usage')
+        .select('usage_count')
+        .eq('user_id', authData.session.user.id)
+        .eq('day_local', today)
+        .single();
+        
+      // PGRST116 means 0 rows, which is fine (first time today)
+      if (usageError && usageError.code !== 'PGRST116') {
+        console.error("Error checking usage:", usageError);
+      }
+        
+      const count = usageData?.usage_count || 0;
+      if (count >= 5) {
+        toast.error("لقد أتممت الحد المسموح للتحليل اليوم (5 مرات). نلتقي غداً!", { style: { background: '#333', color: '#fff' } });
+        setAiLoading(false);
+        return;
+      }
 
-    const totalHabits = habits.length;
-    const goodHabits = habits.filter(h => h.habit_type !== 'quit').length;
-    const quitHabits = habits.filter(h => h.habit_type === 'quit').length;
+      const selectedMonthName = currentDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+      const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() &&
+        currentDate.getFullYear() === new Date().getFullYear();
 
-    const prompt = `أنت زينيث AI، مساعد التطوير الشخصي. قم بتحليل أداء المستخدم في عاداته للشهر: ${selectedMonthName}${isCurrentMonth ? ' (الشهر الجاري)' : ''}.
+      const ctx = JSON.stringify(monthsStats.slice(0, 6).map(m => ({
+        name: m.name,
+        limitedScore: m.limitedScore,
+        totalScore: m.totalScore,
+        limitDay: m.limitDay,
+        isRealCurrent: m.isRealCurrent
+      })));
 
-معلومات العادات: ${totalHabits} عادة إجمالاً (${goodHabits} عادة إيجابية، ${quitHabits} عادة يريد تركها).
+      const habitDetailsStr = habits.map(h => {
+        const isQuit = h.habit_type === 'quit';
+        const typeStr = isQuit ? "تجنب عادة سيئة" : "بناء عادة إيجابية";
+        const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+        let monthCheckins = 0;
+        if (isQuit) {
+          const createdAt = h.created_at ? new Date(h.created_at) : new Date(0);
+          const daysToConsider = isCurrentMonth ? new Date().getDate() : new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+          for (let i = 1; i <= daysToConsider; i++) {
+            const dateStr = `${prefix}-${String(i).padStart(2, "0")}`;
+            const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+            if (dateObj >= new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate())) {
+              if (!h.relapses?.has(dateStr)) monthCheckins++;
+            }
+          }
+        } else {
+          h.checkins?.forEach(dateStr => {
+            if (dateStr.startsWith(prefix)) monthCheckins++;
+          });
+        }
+        return `- العادة: "${h.title}" | النوع: ${typeStr} | الإنجاز هذا الشهر: ${monthCheckins} | السلسلة: ${h.streak?.current_streak || 0} يوم`;
+      }).join('\\n');
 
-بيانات الأداء الشهري (limitedScore = الإنجازات حتى نفس اليوم لمقارنة عادلة):
+      const prompt = `أنت "زينيث"، خبير عالمي متمرس في تحليل البيانات السلوكية، وتطوير الأداء الشخصي، وعلم النفس المعرفي. مهمتك الآن تقديم تحليل شامل، عميق، وقاسٍ أحياناً لبيانات المستخدم لشهر ${selectedMonthName}. المستخدم يكره السطحية ويريد تحليل خبير غائص في التفاصيل.
+
+البيانات التاريخية للأشهر (لمعرفة التقدم العام):
 ${ctx}
 
-ملاحظة: "limitedScore" يقيس الإنجاز في أول (limitDay) يوم من كل شهر لضمان مقارنة عادلة.
+بيانات كل عادة بالتفصيل (هذا الشهر):
+${habitDetailsStr}
 
-اكتب تقريراً موجزاً من 3-4 نقاط:
-1. تقييم أداء شهر ${selectedMonthName} تحديداً مقارنةً بالأشهر السابقة.
-2. أبرز نقاط القوة والضعف في هذه الفترة.
-3. نصيحة عملية واحدة محددة لتحسين الأداء.
-4. تشجيع قوي ومختصر.
-تحدث بأسلوب مدرب شخصي داعم، ولا تستخدم JSON أبداً.`;
+المطلوب استخراج تقرير تحليلي طويل، مفصل، واحترافي جداً (بدون استخدام علامات النجمة * أبداً، استخدم الأرقام والشرطات والمسافات للتنسيق):
 
-    try {
-      const apiKey = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
+1. تقييم الأداء العام: تحليل لمدى استقرار أو تذبذب أداء المستخدم مقارنة بالأشهر السابقة بناءً على لغة الأرقام.
+2. تشريح العادات الجيدة: حدد العادات الإيجابية التي أبلى فيها حسناً بالاسم. حلل هذا النجاح بناءً على قوة السلسلة والإنجاز.
+3. تفكيك العادات المهملة والسيئة: حدد العادات التي تعاني من قصور شديد، سواء إيجابية مهملة أو سيئة عاد إليها. واجه المستخدم بالحقيقة بأسلوب حازم.
+4. الخطة التكتيكية: قدم 3 خطوات عملية استراتيجية مصممة خصيصاً لهذه العادات الضعيفة (مثل تقنية 2-Minute Rule، أو Habit Stacking).
+5. الخلاصة: رسالة ختامية تزرع الانضباط وتطالبه بنتائج أفضل.
 
-      const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "mistral-large-latest",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.7,
-          max_tokens: 600,
-        }),
-      });
+تحدث كخبير حقيقي يقرأ بين السطور. يجب أن يكون التقرير دسماً، طويلاً، ويذكر أسماء العادات الخاصة به بالتفصيل.`;
+
+      toast.info("جاري إرسال البيانات للذكاء الاصطناعي (قد يستغرق 30-60 ثانية)...", { id: "ai-loading" });
+      const aiText = await generateComplexAnalyticsReport(prompt);
+      toast.dismiss("ai-loading");
       
-      if (!res.ok) {
-        throw new Error(`HTTP Error: ${res.status}`);
+      let finalAiText = aiText;
+      if (typeof finalAiText === "string") {
+        finalAiText = finalAiText.replace(/\*/g, ""); // إزالة جميع النجوم
       }
       
-      const data = await res.json();
+      setAiInsight(finalAiText);
+      localStorage.setItem(`zenith_ai_report_${authData.session.user.id}_${today}`, finalAiText);
       
-      let aiText = data.choices?.[0]?.message?.content ?? null;
-      if (typeof aiText === "string") {
-        aiText = aiText.replace(/\*/g, ""); // إزالة جميع النجوم
-      }
-      
-      setAiInsight(aiText);
-      localStorage.setItem(limitKey, String(count + 1));
+      // Update DB
+      await supabase.from('daily_ai_usage').upsert({
+        user_id: authData.session.user.id,
+        day_local: today,
+        usage_count: count + 1
+      }, { onConflict: 'user_id,day_local' });
+
       toast.success("تم الانتهاء من التحليل!", { style: { background: '#333', color: '#fff' } });
     } catch (err: any) {
       setAiError(true);
@@ -399,7 +441,8 @@ ${ctx}
     amber: "#F59E0B", yellow: "#EAB308", lime: "#84CC16", green: "#22C55E",
     emerald: "#10B981", teal: "#14B8A6", cyan: "#06B6D4", sky: "#0EA5E9",
     blue: "#3B82F6", indigo: "#6366F1", violet: "#8B5CF6", purple: "#A855F7",
-    fuchsia: "#D946EF", pink: "#EC4899", rose: "#F43F5E", brown: "#A52A2A",
+    fuchsia: "#D946EF", pink: "#EC4899", rose: "#F43F5E", brown: "#8B4513",
+    coral: "#FF7F50", gold: "#FFD700", crimson: "#DC143C",
   };
 
   const isPositive = monthsStats.length >= 2 ? monthsStats[0].limitedScore >= monthsStats[1].limitedScore : true;
@@ -421,12 +464,12 @@ ${ctx}
         className="space-y-6 print:hidden"
         id="analytics-report"
       >
-      <div className="glass rounded-3xl p-6 border border-white/[0.06] relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5" />
+      <div className="glass rounded-3xl p-6 border border-white/[0.08] relative overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-emerald-500/5 pointer-events-none" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/10">
-              <BarChart3 className="text-blue-400" size={26} />
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center border border-white/10 shadow-inner">
+              <BarChart3 className="text-green-400" size={26} />
             </div>
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -449,9 +492,9 @@ ${ctx}
             <button
               onClick={generateAIReport}
               disabled={aiLoading}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 rounded-xl border border-blue-500/30 text-blue-300 font-bold text-sm transition group relative"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 rounded-xl border border-green-500/30 text-green-300 font-bold text-sm transition group relative shadow-[0_0_15px_rgba(34,197,94,0.1)] hover:shadow-[0_0_20px_rgba(34,197,94,0.2)]"
             >
-              {aiLoading ? <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" /> : <Brain size={18} />}
+              {aiLoading ? <div className="w-4 h-4 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin" /> : <Brain size={18} />}
               تحليل بالذكاء الاصطناعي
               
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 p-2 bg-black/90 border border-white/10 rounded-lg text-xs text-white text-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
@@ -476,11 +519,11 @@ ${ctx}
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="glass p-5 rounded-2xl border border-blue-500/20 relative">
-              <div className="absolute inset-0 bg-blue-500/5" />
+            <div className="glass p-5 rounded-2xl border border-green-500/20 relative shadow-[0_8px_32px_rgba(34,197,94,0.05)]">
+              <div className="absolute inset-0 bg-green-500/5" />
               <div className="relative">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-blue-400 font-bold">
+                  <div className="flex items-center gap-2 text-green-400 font-bold">
                     <Brain size={18} />
                     تحليل زينيث AI
                   </div>
@@ -668,7 +711,7 @@ ${ctx}
                   <motion.div
                     className={`h-full rounded-full bg-gradient-to-r ${idx === 0 ? 'from-green-500 to-emerald-400' : 'from-blue-500 to-cyan-400'}`}
                     initial={{ width: 0 }}
-                    animate={{ width: `${Number(Math.min((mStat.limitedScore / maxScore) * 100, 100).toFixed(2))}%` }}
+                    animate={{ width: `${mStat.limitedPossible > 0 ? Number(Math.min((mStat.limitedScore / mStat.limitedPossible) * 100, 100).toFixed(2)) : 0}%` }}
                     transition={{ duration: 1, ease: "easeOut", delay: 0.5 + (idx * 0.1) }}
                   />
                 </div>

@@ -12,30 +12,57 @@ type Props = {
 };
 
 const COLORS: { id: HabitColor; hex: string; name: string }[] = [
+  // Red & Pink
   { id: "red", hex: "#EF4444", name: "أحمر" },
-  { id: "orange", hex: "#F97316", name: "برتقالي" },
-  { id: "amber", hex: "#F59E0B", name: "عنبري" },
-  { id: "yellow", hex: "#EAB308", name: "أصفر" },
-  { id: "lime", hex: "#84CC16", name: "ليموني" },
-  { id: "green", hex: "#22C55E", name: "أخضر" },
-  { id: "emerald", hex: "#10B981", name: "زمردي" },
-  { id: "teal", hex: "#14B8A6", name: "مخضر" },
-  { id: "cyan", hex: "#06B6D4", name: "سماوي" },
-  { id: "sky", hex: "#0EA5E9", name: "سماوي فاتح" },
-  { id: "blue", hex: "#3B82F6", name: "أزرق" },
-  { id: "indigo", hex: "#6366F1", name: "نيلي" },
-  { id: "violet", hex: "#8B5CF6", name: "بنفسجي فاتح" },
-  { id: "purple", hex: "#A855F7", name: "بنفسجي" },
-  { id: "fuchsia", hex: "#D946EF", name: "فوشيا" },
-  { id: "pink", hex: "#EC4899", name: "وردي" },
   { id: "rose", hex: "#F43F5E", name: "وردي فاتح" },
+  { id: "pink", hex: "#EC4899", name: "وردي" },
+  { id: "fuchsia", hex: "#D946EF", name: "فوشيا" },
+  { id: "crimson", hex: "#DC143C", name: "قرمزي" },
+  
+  // Purple & Blue
+  { id: "purple", hex: "#A855F7", name: "بنفسجي" },
+  { id: "violet", hex: "#8B5CF6", name: "بنفسجي فاتح" },
+  { id: "indigo", hex: "#6366F1", name: "نيلي" },
+  { id: "blue", hex: "#3B82F6", name: "أزرق" },
+  { id: "sky", hex: "#0EA5E9", name: "سماوي فاتح" },
+  { id: "cyan", hex: "#06B6D4", name: "سماوي" },
+  
+  // Green & Yellow
+  { id: "teal", hex: "#14B8A6", name: "مخضر" },
+  { id: "emerald", hex: "#10B981", name: "زمردي" },
+  { id: "green", hex: "#22C55E", name: "أخضر" },
+  { id: "lime", hex: "#84CC16", name: "ليموني" },
+  { id: "yellow", hex: "#EAB308", name: "أصفر" },
+  { id: "amber", hex: "#F59E0B", name: "عنبري" },
+  { id: "orange", hex: "#F97316", name: "برتقالي" },
+  
+  // Others
+  { id: "coral", hex: "#FF7F50", name: "مرجاني" },
+  { id: "gold", hex: "#FFD700", name: "ذهبي" },
+  { id: "slate", hex: "#64748B", name: "رمادي" },
+  { id: "brown", hex: "#8B4513", name: "بني" },
 ];
 
 const ICONS = [
-  "✨", "📚", "🏃‍♂️", "💧", "🧘‍♂️", "🍎", "💻", "💪", "🛌", "🎵",
-  "🧠", "🥗", "🚴‍♂️", "🚶‍♂️", "✍️", "📖", "🎨", "🎯", "💰", "🌱",
-  "💊", "🚿", "🧹", "☀️", "🌙", "🚭", "📵", "🤝", "🙏", "🎓",
-  "🚗", "✈️", "🍳", "📸", "⚽", "🏀", "🏊‍♂️", "📈", "🌍", "💡"
+  // Health & Fitness
+  "🏃‍♂️", "💪", "🧘‍♂️", "🏊‍♂️", "🚴‍♂️", "🚶‍♂️", "🍎", "🥗", "💧", "💊",
+  "🛌", "🥑", "🏋️‍♂️", "🚿", "⚖️", "🥩", "🥦", "🩺", "🦷", "🧗‍♂️",
+  
+  // Learning & Work
+  "📚", "💻", "🧠", "📖", "🎓", "✍️", "💼", "📈", "🎯", "🔬",
+  "📝", "🏫", "📊", "💡", "🛠️", "⏰", "📅", "📱", "🎧", "🎙️",
+  
+  // Hobbies & Lifestyle
+  "🎨", "🎵", "📸", "🍳", "🪴", "⚽", "🎮", "🎸", "🚗", "✈️",
+  "🌍", "🏕️", "🧹", "🛍️", "💸", "💰", "🎟️", "🎬", "🎤", "🧩",
+
+  // Mind & Spirit
+  "✨", "🙏", "☀️", "🌙", "🤝", "❤️", "🫂", "🕊️", "🧘‍♀️", "🔥",
+  "🌟", "⚡", "🍀", "💎", "⚖️", "🔮", "🧿", "🕯️", "📿", "🌱",
+
+  // Bad Habits to Quit
+  "🚭", "📵", "🍔", "🍺", "🥱", "🤬", "🍬", "💳", "📺", "🕹️",
+  "🚬", "🍕", "🍟", "🧁", "🍩", "🛋️", "📱", "🎰", "💸", "😡"
 ];
 
 export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
@@ -194,8 +221,11 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Icon */}
               <div>
-                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">الأيقونة</label>
-                <div className="grid grid-cols-8 gap-2 p-3 bg-black/40 rounded-2xl border border-white/5 max-h-36 overflow-y-auto scrollbar-thin">
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest flex items-center justify-between">
+                  <span>الأيقونة</span>
+                  <span className="text-[10px] text-white/20">{ICONS.length} أيقونة</span>
+                </label>
+                <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5 p-3 bg-black/40 rounded-2xl border border-white/5 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                   {ICONS.map((i) => (
                     <button
                       key={i}
@@ -203,8 +233,8 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
                       onClick={() => setIcon(i)}
                       className={`aspect-square rounded-xl text-xl flex items-center justify-center transition-all ${
                         icon === i
-                          ? "bg-white/20 scale-110 shadow-lg border border-white/10"
-                          : "hover:bg-white/10"
+                          ? "bg-white/20 scale-110 shadow-lg border border-white/20"
+                          : "hover:bg-white/5 hover:scale-110 filter saturate-50 hover:saturate-100 opacity-70 hover:opacity-100"
                       }`}
                     >
                       {i}
@@ -215,21 +245,29 @@ export function HabitModal({ isOpen, onClose, onSave, habit }: Props) {
 
               {/* Color */}
               <div>
-                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest">اللون</label>
-                <div className="flex flex-wrap gap-3 p-4 bg-black/40 rounded-2xl border border-white/5">
+                <label className="block text-[11px] font-bold text-white/40 mb-2 uppercase tracking-widest flex items-center justify-between">
+                  <span>اللون</span>
+                  <span className="text-[10px] text-white/20">{COLORS.length} لون</span>
+                </label>
+                <div className="grid grid-cols-7 sm:grid-cols-10 gap-2 p-4 bg-black/40 rounded-2xl border border-white/5 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                   {COLORS.map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setColor(c.id)}
-                      className={`w-8 h-8 rounded-full transition-all ${
+                      className={`aspect-square rounded-full transition-all relative group ${
                         color === c.id
-                          ? "ring-2 ring-white/80 ring-offset-4 ring-offset-[#09090B] scale-110 shadow-lg"
-                          : "hover:scale-110 opacity-50 hover:opacity-100"
+                          ? "ring-2 ring-white ring-offset-4 ring-offset-[#09090B] scale-110 shadow-lg"
+                          : "hover:scale-110 opacity-60 hover:opacity-100"
                       }`}
                       style={{ backgroundColor: c.hex }}
                       title={c.name}
-                    />
+                    >
+                      {/* Tooltip */}
+                      <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-10 border border-white/10">
+                        {c.name}
+                      </span>
+                    </button>
                   ))}
                 </div>
               </div>

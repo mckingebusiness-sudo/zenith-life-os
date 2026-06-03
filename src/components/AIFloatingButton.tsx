@@ -188,7 +188,10 @@ function buildHabitsContext(habits: ReturnType<typeof useHabits>["habits"]) {
     return {
       id: h.id,
       title: h.title,
+      icon: h.icon || "✨",
+      color: h.color || "green",
       type: isGood ? "إيجابية" : "سلبية/للإقلاع",
+      habit_type: (h as any).habit_type || "good",
       streak,
       longestStreak,
       totalCheckins: h.streak?.total_checkins || 0,
@@ -319,7 +322,7 @@ function ThinkingIndicator() {
 }
 
 // ─── SYSTEM PROMPT - شخصية ذكية وإنسانية ─────────────────────────────────────
-const SYSTEM_PROMPT = `أنت "زينيث AI" (Zenith AI)، مساعد متطور جداً وواقعي لأقصى حد في تتبع العادات والتطوير الشخصي، مدمج في تطبيق Zenith Life OS. 
+const BASE_SYSTEM_PROMPT = `أنت "زينيث AI" (Zenith AI)، مساعد متطور جداً وواقعي لأقصى حد في تتبع العادات والتطوير الشخصي، مدمج في تطبيق Zenith Life OS. 
 
 [شخصيتك وأسلوبك]
 - أنت تمتلك صلاحيات كاملة للتحدث كإنسان حقيقي بجد، واقعي جداً في ردودك، وليس كآلة.
@@ -342,12 +345,26 @@ const SYSTEM_PROMPT = `أنت "زينيث AI" (Zenith AI)، مساعد متطو�
 - استخدم الإيموجي بذكاء لتضيف لمسة بشرية.
 - لا تعرض أكواد أو JSON نهائياً للمستخدم.
 
-[الإجراءات المتاحة]
-لإضافة أو حذف عادة، ضع السطر السحري التالي في نهاية ردك الطبيعي في سطر جديد:
-لإضافة عادة إيجابية: [ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
-لإضافة عادة سيئة: [ACTION_ADD] {"title":"اسم العادة السيئة","icon":"🚫","color":"red","habit_type":"quit"}
-للحذف: [ACTION_DELETE] {"title":"اسم العادة"}
-للتعديل: [ACTION_UPDATE] {"id":"habit-id","updates":{"title":"العنوان الجديد"}}`;
+[الإجراءات المتاحة - مهم جداً]
+عندما يطلب المستخدم إضافة أو حذف أو تعديل عادة، يجب أن تضع سطر الإجراء في نهاية ردك (سطر جديد منفصل).
+كل إجراء يجب أن يكون في سطر مستقل. لا تدمج أكثر من إجراء في سطر واحد.
+
+لإضافة عادة إيجابية:
+[ACTION_ADD] {"title":"اسم العادة","icon":"🚀","color":"green","habit_type":"good"}
+
+لإضافة عادة سيئة (للإقلاع عنها):
+[ACTION_ADD] {"title":"اسم العادة السيئة","icon":"🚫","color":"red","habit_type":"quit"}
+
+لحذف عادة (استخدم الـ id من القائمة أدناه):
+[ACTION_DELETE] {"id":"الـ id الحقيقي للعادة","title":"اسم العادة"}
+
+لتعديل عادة (تغيير العنوان أو الأيقونة أو اللون):
+[ACTION_UPDATE] {"id":"الـ id الحقيقي للعادة","updates":{"title":"العنوان الجديد","icon":"🎯","color":"blue"}}
+
+ملاحظات مهمة:
+- عند الحذف أو التعديل، يجب أن تستخدم الـ id الحقيقي من قائمة العادات المرفقة أدناه.
+- الألوان المتاحة: green, blue, red, orange, amber, yellow, lime, emerald, teal, cyan, sky, indigo, violet, purple, fuchsia, pink, rose, slate, gray, brown.
+- لا تعرض الـ JSON أو الـ id للمستخدم أبداً. اكتب ردك الطبيعي أولاً ثم ضع سطر الإجراء في النهاية.`;
 
 const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
 
@@ -373,8 +390,7 @@ function incrementMsgCount() {
   return count;
 }
 
-const MSG_LIMIT = 2;
-
+const MSG_LIMIT = 50;
 // ─── Human-like delay simulation ─────────────────────────────────────────────
 /**
  * تأخير عشوائي يحاكي وقت التفكير البشري
@@ -390,12 +406,14 @@ export default function AIPanel({
   onClose,
   onAddHabit,
   onDeleteHabit,
+  onUpdateHabit,
   side = "right",
 }: {
   open: boolean;
   onClose: () => void;
   onAddHabit?: (habit: { title: string; icon: string; color: string; habit_type?: string }) => Promise<void>;
-  onDeleteHabit?: (title: string) => Promise<void>;
+  onDeleteHabit?: (id: string) => Promise<void>;
+  onUpdateHabit?: (id: string, updates: Partial<{ title: string; icon: string; color: string }>) => Promise<void>;
   side?: "left" | "right";
 }) {
   const [width, setWidth] = useState(480);
@@ -475,39 +493,79 @@ export default function AIPanel({
           await new Promise(resolve => setTimeout(resolve, 400));
         }
         if (action.type === "delete_habit" && onDeleteHabit && action.data) {
+          // Try by ID first, then fallback to title match
+          const id = String(action.data.id || "");
           const title = String(action.data.title || "");
-          if (title) {
-            await onDeleteHabit(title);
-            showToast(`🗑️ تم حذف: ${title}`);
+          if (id && !id.includes("habit-id")) {
+            await onDeleteHabit(id);
+            showToast(`🗑️ تم حذف: ${title || "العادة"}`);
+          } else if (title) {
+            // Fallback: find by title
+            const found = habits.find(h => h.title.toLowerCase().includes(title.toLowerCase()));
+            if (found) {
+              await onDeleteHabit(found.id);
+              showToast(`🗑️ تم حذف: ${title}`);
+            } else {
+              showToast(`⚠️ لم أجد عادة باسم: ${title}`);
+            }
+          }
+        }
+        if (action.type === "update_habit" && onUpdateHabit && action.data) {
+          const id = String(action.data.id || "");
+          const updates = action.data.updates as Record<string, unknown> | undefined;
+          if (id && updates && !id.includes("habit-id")) {
+            const cleanUpdates: Partial<{ title: string; icon: string; color: string }> = {};
+            if (updates.title) cleanUpdates.title = String(updates.title);
+            if (updates.icon) cleanUpdates.icon = String(updates.icon);
+            if (updates.color) cleanUpdates.color = String(updates.color);
+            await onUpdateHabit(id, cleanUpdates);
+            showToast(`✏️ تم تعديل العادة بنجاح`);
+          } else {
+            // Fallback: try to find by title in updates or data
+            const searchTitle = String(updates?.title || action.data.title || "");
+            const found = habits.find(h => h.title.toLowerCase().includes(searchTitle.toLowerCase()));
+            if (found && updates) {
+              const cleanUpdates: Partial<{ title: string; icon: string; color: string }> = {};
+              if (updates.title) cleanUpdates.title = String(updates.title);
+              if (updates.icon) cleanUpdates.icon = String(updates.icon);
+              if (updates.color) cleanUpdates.color = String(updates.color);
+              await onUpdateHabit(found.id, cleanUpdates);
+              showToast(`✏️ تم تعديل العادة بنجاح`);
+            } else {
+              showToast(`⚠️ لم أجد العادة للتعديل`);
+            }
           }
         }
       } catch (e) {
         console.error("Action failed:", e);
+        showToast(`❌ فشل تنفيذ الإجراء`);
       }
     }
   };
 
   const callMistral = async (msgs: ChatMessage[], contextOverride?: string) => {
     const ctx = buildHabitsContext(habits);
-    const context = contextOverride || JSON.stringify(ctx, null, 2);
+
+    // قائمة العادات مع الـ IDs الحقيقية — ضرورية للتعديل والحذف
+    const habitsListForAI = ctx.habits.map(h => 
+      `- id: "${h.id}" | الاسم: "${h.title}" | الأيقونة: ${h.icon} | اللون: ${h.color} | النوع: ${h.habit_type}`
+    ).join("\n");
 
     // سياق غني ومنظم للذكاء الاصطناعي
-    const systemWithContext = SYSTEM_PROMPT + `
+    const systemWithContext = BASE_SYSTEM_PROMPT + `
 
-[بيانات المستخدم الحية - راجعها فقط للإجابة إذا كان السؤال يتطلب ذلك]:
+[بيانات المستخدم الحية]:
 التاريخ: ${ctx.dayName}، ${ctx.currentDate}
 الوقت: ${ctx.timeOfDay}
 الشهر: ${ctx.currentMonth} (${ctx.daysElapsedInMonth} يوم مضى)
-
 الإنجاز اليوم: ${ctx.todayProgress}
 متوسط الإنجاز الشهري: ${ctx.averageMonthlyCompletion}
 أفضل عادة: ${ctx.bestHabit}
 أضعف عادة: ${ctx.worstHabit}
-
 عدد العادات: ${ctx.totalHabits} (${ctx.goodHabitsCount} إيجابية، ${ctx.badHabitsCount} للإقلاع)
 
-التفاصيل الكاملة:
-${JSON.stringify(ctx.habits, null, 2)}`;
+[قائمة العادات الحالية مع الـ IDs]:
+${habitsListForAI}`;
 
     const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
@@ -519,15 +577,19 @@ ${JSON.stringify(ctx.habits, null, 2)}`;
         model: "mistral-large-latest",
         messages: [
           { role: "system", content: systemWithContext },
-          ...msgs.map(m => ({ role: m.role, content: m.content })),
+          ...msgs.slice(-6).map(m => ({ role: m.role, content: m.content })),
         ],
-        temperature: 0.78,  // أعلى شوية لردود أكثر طبيعية وإنسانية
+        temperature: 0.78,
         max_tokens: 1200,
         top_p: 0.92,
       }),
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error("Mistral API error:", res.status, errText);
+      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
     const data = await res.json();
     return data.choices?.[0]?.message?.content ?? "عذراً، حدث خطأ.";
   };
@@ -564,10 +626,19 @@ ${JSON.stringify(ctx.habits, null, 2)}`;
 
       setMessages(prev => [...prev, { role: "assistant", content: cleanText || "تم ✅" }]);
       setThinkingPhase(null);
+      setIsLoading(false);
+
+      // Execute actions separately — if they fail, the response is already shown
       if (actions.length > 0) {
-        await executeActions(actions);
+        try {
+          await executeActions(actions);
+        } catch (actionErr: any) {
+          console.error("❌ Action execution failed:", actionErr);
+          toast.error(`حدث خطأ أثناء تنفيذ أمر الذكاء الاصطناعي: ${actionErr?.message || 'خطأ غير معروف'}`);
+        }
       }
-    } catch {
+    } catch (err) {
+      console.error("❌ AI call failed:", err);
       setThinkingPhase(null);
       setMessages(prev => [...prev, { role: "assistant", content: "😅 تعذر الاتصال بالخادم، جرب مرة تانية." }]);
       setIsLoading(false);
@@ -617,7 +688,8 @@ ${JSON.stringify(ctx.habits, null, 2)}`;
 
       await humanDelay(200, 400);
       setMessages(prev => [...prev, { role: "assistant", content: cleanText }]);
-    } catch {
+    } catch (err) {
+      console.error("❌ Deep analysis failed:", err);
       setMessages(prev => [...prev, { role: "assistant", content: "😅 تعذر إجراء التحليل، جرب تاني." }]);
     } finally {
       setIsAnalyzing(false);

@@ -3,6 +3,41 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+// Mistral API as reliable fallback when Gemini key is not configured
+const MISTRAL_API_KEY = "t1TpbGo6LWp1S8N2JoDWB7aZy0cvzV7b";
+
+async function callMistralAPI(prompt: string, responseFormat?: "json"): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  
+  try {
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MISTRAL_API_KEY}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: "mistral-large-latest",
+        messages: [
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 1500,
+        top_p: 0.9,
+        ...(responseFormat === "json" ? { response_format: { type: "json_object" } } : {}),
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Mistral HTTP ${res.status}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? "";
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function generateMoodAnalysis(habitsData: any) {
   const fallbackData = {
     mood: {
@@ -18,13 +53,7 @@ export async function generateMoodAnalysis(habitsData: any) {
     }
   };
 
-  if (!API_KEY) {
-    return fallbackData;
-  }
-
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `أنت مساعد ذكي مدمج في تطبيق تتبع العادات (Zenith Life OS). 
+  const prompt = `أنت مساعد ذكي مدمج في تطبيق تتبع العادات (Zenith Life OS). 
 قم بتحليل بيانات العادات والمزاج التالية للمستخدم وقدم إحصائيات واقعية وتخيلية ذكية لتأثير المزاج وأفضل وقت لإنجاز العادات بناءً على البيانات.
 يجب أن تعيد الإجابة بصيغة JSON فقط، بدون أي نصوص إضافية، بالشكل التالي:
 {
@@ -45,35 +74,66 @@ export async function generateMoodAnalysis(habitsData: any) {
 بيانات المستخدم:
 ${JSON.stringify(habitsData, null, 2)}`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const match = text.match(/\\{[\\s\\S]*\\}/);
+  // Try Gemini first, then Mistral fallback
+  if (API_KEY) {
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+      return JSON.parse(text);
+    } catch (error) {
+      console.error("Gemini API error, falling back to Mistral:", error);
+    }
+  }
+
+  // Mistral fallback
+  try {
+    const text = await callMistralAPI(prompt, "json");
+    const match = text.match(/\{[\s\S]*\}/);
     if (match) {
       return JSON.parse(match[0]);
     }
     return JSON.parse(text);
   } catch (error) {
-    console.error("Gemini API error:", error);
+    console.error("Mistral API error:", error);
     return fallbackData;
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Timeout")), ms);
+  });
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeoutPromise
+  ]);
+}
+
 export async function generateComplexAnalyticsReport(promptText: string) {
-  if (!API_KEY) {
-    return `مرحباً، أنا زينيث AI.
-بناءً على الأرقام، أنت تبلي بلاءً حسناً هذا الشهر مقارنةً بالشهور السابقة.
-نقاط قوتك هي التزامك في أيام العمل، ونقاط الضعف تكمن في عطلات نهاية الأسبوع.
-نصيحتي: حاول تجهيز بيئتك لليوم التالي لتقليل الاحتكاك عند أداء العادات.
-(أضف مفتاح VITE_GEMINI_API_KEY للحصول على تقرير ذكاء اصطناعي مفصل ودقيق!)`;
+  // Try Gemini first if key exists
+  if (API_KEY) {
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await withTimeout(model.generateContent(promptText), 60000) as any;
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.error("Gemini API error, falling back to Mistral:", error);
+    }
   }
 
+  // Mistral fallback — always available
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(promptText);
-    const response = await result.response;
-    return response.text();
+    const text = await withTimeout(callMistralAPI(promptText), 60000);
+    return text;
   } catch (error) {
-    console.error("Gemini API error:", error);
-    return "حدث خطأ أثناء الاتصال بالذكاء الاصطناعي. يرجى المحاولة لاحقاً.";
+    console.error("Mistral API error:", error);
+    throw new Error("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي.");
   }
 }

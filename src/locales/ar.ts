@@ -18,7 +18,7 @@ export default {
       agent: "العميل",
       systemStatus: "حالة النظام: ممتازة",
       dashboard: "لوحة القيادة",
-      habits: "حديقة العادات",
+      habits: "عادات",
       finances: "المالية",
       timeline: "الجدول الزمني",
       settings: "الإعدادات",

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useHabits, HabitWithStreak, Habit } from "@/hooks/useHabits";
+import { calculateTodayProgress } from "@/lib/habitCalculations";
 import { HabitMonthlyGrid } from "@/components/habits/HabitMonthlyGrid";
 import { HabitModal } from "@/components/habits/HabitModal";
 import { HabitsAnalytics } from "@/components/habits/HabitsAnalytics";
@@ -80,9 +81,10 @@ function HabitsPage() {
     const isCurrentMonth = currentDate.getMonth() === new Date().getMonth() &&
       currentDate.getFullYear() === new Date().getFullYear();
     if (!isCurrentMonth || habits.length === 0) return;
-    const totalItems = habits.length;
-    const totalSuccess = habits.filter(h => h.checkedToday).length;
-    const pct = totalItems > 0 ? Math.round((totalSuccess / totalItems) * 100) : 0;
+    
+    const progress = calculateTodayProgress(habits);
+    const pct = progress.percentage;
+    
     const todayStr = new Intl.DateTimeFormat("en-CA").format(new Date());
     const key = `confetti_fired_${todayStr}`;
     if (pct === 100 && confettiFiredRef.current !== todayStr && !localStorage.getItem(key)) {

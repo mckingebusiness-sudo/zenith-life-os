@@ -34,6 +34,7 @@ export interface Habit {
   grace_days: number;
   is_private: boolean;
   sort_order: number;
+  created_at?: string;
   // Quit Habits
   habit_type?: 'good' | 'quit';
   saved_value_per_day?: number;
@@ -140,24 +141,91 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
     const habitType = h.habit_type || 'good';
     const relapsedToday = habitRelapses.has(today);
 
-    // For quit/avoidance habits, calculate streak client-side from last relapse
-    // DB triggers only process habit_checkins, which quit habits don't use
     let dbStreak = (Array.isArray(h.streak) ? h.streak[0] : h.streak) || { current_streak: 0, longest_streak: 0, total_checkins: 0 };
-    
-    if (habitType === 'quit') {
-      // Find the most recent relapse date
-      const relapseDates = Array.from(habitRelapses as Set<string>).sort();
-      let avoidedStreak = 0;
-      
-      if (relapseDates.length === 0) {
-        // No relapses ever — count from habit creation date or start of data window
-        const createdAt = h.created_at ? new Date(h.created_at) : startDate;
-        const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
+
+    // ✅ FIX: Calculate streak client-side for ALL good habits so freezes count as +1.
+    // The DB trigger bridges gaps but does NOT add +1 to the streak for frozen days.
+    const cadence: HabitCadence = h.cadence || 'daily';
+    if (habitType !== 'quit') {
+      const handledDates = Array.from(new Set([...habitCheckins, ...habitFreezes])).sort() as string[];
+      const totalCheckins = habitCheckins.size; // DB total_checkins only counts actual checkins
+
+      // Allowed gap (in days) between consecutive handled days before streak breaks
+      // daily → 1 day, weekly → 7 days, monthly → 31 days, times_per_week → 7 days
+      const allowedGap = cadence === 'monthly' ? 31 : cadence === 'weekly' || cadence === 'times_per_week' ? 7 : 1;
+
+      let calculatedCurrentStreak = 0;
+      let longestStreak = 0;
+      let runLen = 0;
+
+      // Calculate longest streak in our fetched window
+      for (let i = 0; i < handledDates.length; i++) {
+        const curr = new Date(handledDates[i]);
+        if (i === 0) {
+          runLen = 1;
+        } else {
+          const prev = new Date(handledDates[i - 1]);
+          const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays <= allowedGap) {
+            runLen += 1;
+          } else {
+            runLen = 1;
+          }
+        }
+        longestStreak = Math.max(longestStreak, runLen);
+      }
+
+      // Calculate current streak backwards from latest handled date
+      if (handledDates.length > 0) {
+        const lastHandled = new Date(handledDates[handledDates.length - 1]);
         const todayDate = new Date(today);
-        const createdDate = new Date(createdDay);
-        avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const daysSinceLast = Math.round((todayDate.getTime() - lastHandled.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysSinceLast <= allowedGap) {
+          calculatedCurrentStreak = 1;
+          for (let i = handledDates.length - 1; i > 0; i--) {
+            const curr = new Date(handledDates[i]);
+            const prev = new Date(handledDates[i - 1]);
+            const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays <= allowedGap) {
+              calculatedCurrentStreak++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+
+      let currentStreak = calculatedCurrentStreak;
+      // If the streak didn't break in our fetched 6-month window, the DB might know about a longer streak.
+      if (calculatedCurrentStreak === handledDates.length && dbStreak.current_streak > calculatedCurrentStreak) {
+         currentStreak = dbStreak.current_streak + habitFreezes.size; 
+      }
+
+      dbStreak = {
+        ...dbStreak,
+        current_streak: currentStreak,
+        longest_streak: Math.max(dbStreak.longest_streak || 0, longestStreak),
+        total_checkins: totalCheckins,
+      };
+    }
+
+    // ✅ FIX: Calculate streak client-side for quit habits since DB triggers only process checkins
+    if (habitType === 'quit') {
+      const relapseDates = Array.from(habitRelapses).sort();
+      let avoidedStreak = 0;
+      if (relapseDates.length === 0) {
+        if (h.created_at) {
+          const createdAt = new Date(h.created_at);
+          const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
+          if (createdDay <= today) {
+            const todayDate = new Date(today);
+            const createdDate = new Date(createdDay);
+            const diffDays = Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+            avoidedStreak = diffDays + 1;
+          }
+        }
       } else {
-        // Count days since last relapse
         const lastRelapse = relapseDates[relapseDates.length - 1];
         const lastRelapseDate = new Date(lastRelapse);
         const todayDate = new Date(today);
@@ -167,9 +235,22 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
       dbStreak = {
         ...dbStreak,
         current_streak: avoidedStreak,
-        longest_streak: Math.max(dbStreak.longest_streak || 0, avoidedStreak),
-        total_checkins: relapseDates.length, // total relapses for reference
+        longest_streak: Math.max(dbStreak.longest_streak || 0, avoidedStreak)
       };
+    }
+
+    // ✅ FIX: Don't auto-succeed quit habits for today if the habit was created today or later
+    // Only consider "avoided" if the habit existed before today
+    let avoidedToday: boolean | undefined = undefined;
+    if (habitType === 'quit') {
+      if (h.created_at) {
+        const createdDate = new Date(h.created_at);
+        const createdStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdDate);
+        // Only count as avoided if the habit existed on or before today AND no relapse
+        avoidedToday = createdStr <= today && !relapsedToday;
+      } else {
+        avoidedToday = !relapsedToday;
+      }
     }
 
     return {
@@ -180,10 +261,10 @@ async function fetchHabits(year: number, month: number): Promise<HabitWithStreak
       freezes: habitFreezes,
       relapses: habitRelapses,
       relapseLogs: habitRelapseLogs,
-      checkedToday: habitType === 'quit' ? false : habitCheckins.has(today), // For quit habits, use avoidedToday instead
+      checkedToday: habitCheckins.has(today), // Explicit checkin applies to ALL habits now
       frozenToday: habitFreezes.has(today),
       relapsedToday,
-      avoidedToday: habitType === 'quit' ? !relapsedToday : undefined,
+      avoidedToday,
     };
   });
 }
@@ -317,12 +398,14 @@ export function useHabits(currentDate: Date = new Date()) {
         });
       });
     },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
+    onError: (err, _vars, ctx) => {
+      console.error("❌ addHabit FAILED:", err);
+      toast.error(`خطأ في الإضافة: ${err?.message || 'حدث خطأ غير معروف'}`);
+      if (ctx?.previousHabits) qc.setQueryData(queryKey, ctx.previousHabits);
     },
-    // ✅ FIXED: Only invalidate the current month, not all months
+    // ✅ FIXED: Only invalidate the current month, not all months, and return promise
     onSettled: () => {
-      qc.invalidateQueries({ queryKey });
+      return qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -394,7 +477,7 @@ export function useHabits(currentDate: Date = new Date()) {
         checkins: new Set(),
         relapses: new Set(),
         relapseLogs: [],
-        checkedToday: false, // quit habits use avoidedToday, good habits need explicit checkin
+        checkedToday: false, // quit habits need explicit checkin too
         freezes: new Set(),
         frozenToday: false,
         relapsedToday: false,
@@ -453,9 +536,10 @@ export function useHabits(currentDate: Date = new Date()) {
       }
       toast.error("فشل حفظ العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
-    // ✅ Invalidate ALL habits queries so AI changes from AppShell propagate to HabitsPage
+    // ✅ FIX: Only invalidate current month's query, not ALL queries, and return promise
+    // Invalidating KEY (all months) causes race conditions and infinite loading
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      return qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -551,8 +635,9 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
       toast.error("فشل تعديل العادة — " + (err?.message || 'تحقق من الاتصال بالإنترنت'));
     },
+    // ✅ FIX: Only invalidate current month's query, not ALL queries, and return promise
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEY });
+      return qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -582,7 +667,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey });
+      return qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -610,7 +695,7 @@ export function useHabits(currentDate: Date = new Date()) {
       if (ctx?.previous) qc.setQueryData(queryKey, ctx.previous);
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey });
+      return qc.invalidateQueries({ queryKey });
     },
     retry: 0,
   });
@@ -697,11 +782,15 @@ export function useHabits(currentDate: Date = new Date()) {
           const relapseDates = Array.from(newRelapses).sort();
           let avoidedStreak = 0;
           if (relapseDates.length === 0) {
-            const createdAt = h.created_at ? new Date(h.created_at) : new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1);
-            const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
-            const todayDate = new Date(today);
-            const createdDate = new Date(createdDay);
-            avoidedStreak = Math.max(0, Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)));
+            if (h.created_at) {
+              const createdAt = new Date(h.created_at);
+              const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: tz() }).format(createdAt);
+              if (createdDay <= today) {
+                const todayDate = new Date(today);
+                const createdDate = new Date(createdDay);
+                avoidedStreak = Math.floor((todayDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+              }
+            }
           } else {
             const lastRelapse = relapseDates[relapseDates.length - 1];
             const lastRelapseDate = new Date(lastRelapse);

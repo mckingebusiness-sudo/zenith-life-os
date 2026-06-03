@@ -381,7 +381,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
               <div className="w-24 shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
                 🔥 السلسلة
               </div>
-              <div className="w-[110px] shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5">
+              <div className="w-[110px] shrink-0 text-center text-[10px] font-bold text-[#8B9A90] tracking-wider uppercase border-r border-white/5 sticky left-0 right-0 z-10 bg-black/40 backdrop-blur-xl md:static md:bg-transparent">
                 إجراءات
               </div>
             </div>
@@ -443,20 +443,13 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                             <button
                               onClick={() => {
                                 if (!isCurrentMonth) return;
-                                if (isBad) {
-                                  if (day.isToday) {
-                                    if (isRelapsed) {
-                                      onUndoRelapse?.(habit.id);
-                                    } else {
-                                      setRelapseHabitId(habit.id);
-                                      setRelapseReason("");
-                                    }
-                                  }
-                                } else {
-                                  onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check");
+                                if (isRelapsed && day.isToday) {
+                                  onUndoRelapse?.(habit.id);
+                                  return;
                                 }
+                                onCheckIn(habit.id, day.fullDate, isChecked ? "uncheck" : "check");
                               }}
-                              disabled={!isCurrentMonth || (isBad && !day.isToday)}
+                              disabled={!isCurrentMonth || day.isFuture}
                               className={`w-[26px] h-[26px] rounded-lg transition-all duration-300 flex items-center justify-center relative overflow-hidden ${
                                 isChecked || isRelapsed
                                   ? ''
@@ -555,7 +548,7 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                   </div>
 
                   {/* Actions — always visible (Phase 4) */}
-                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1">
+                  <div className="w-[110px] shrink-0 flex items-center justify-center border-r border-white/5 gap-1 sticky left-0 right-0 z-10 bg-[#0F1110]/95 backdrop-blur-xl md:static md:bg-transparent">
                     {habit.habit_type === 'quit' && isCurrentMonth && onResetStreak ? (
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -816,16 +809,20 @@ export function HabitMonthlyGrid({ habits, currentDate, onCheckIn, onEdit, onDel
                         <motion.div
                           key={h.id}
                           className="flex items-center gap-2.5 text-sm text-white/80 cursor-pointer bg-white/[0.02] hover:bg-teal-500/10 p-2 rounded-xl border border-white/5 hover:border-teal-500/20 transition-colors group/item"
-                          onClick={() => onUndoRelapse?.(h.id)}
+                          onClick={() => h.relapsedToday ? onUndoRelapse?.(h.id) : onCheckIn(h.id, todayLocal, "check")}
                           whileTap={{ scale: 0.98 }}
                         >
                           <span className="drop-shadow-md">{h.icon}</span>
                           <span className="truncate font-medium">{h.title}</span>
-                          <span className="text-[10px] font-bold text-teal-400/50 group-hover/item:text-teal-400 mr-auto shrink-0 bg-teal-500/10 px-2 py-1 rounded-md transition-colors opacity-0 group-hover/item:opacity-100">تراجع عن الانتكاسة</span>
+                          {h.relapsedToday ? (
+                            <span className="text-[10px] font-bold text-red-400 mr-auto shrink-0 bg-red-500/10 px-2 py-1 rounded-md">انتكست اليوم</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-teal-400/50 group-hover/item:text-teal-400 mr-auto shrink-0 bg-teal-500/10 px-2 py-1 rounded-md transition-colors">تأكيد التجنب</span>
+                          )}
                         </motion.div>
                       ))}
                       {badHabits.filter(h => !isHabitHandledToday(h)).length === 0 && (
-                        <div className="text-sm font-bold text-teal-400/80 text-center py-4 bg-teal-500/5 rounded-xl border border-teal-500/10">✅ تجنبت كل العادات السيئة!</div>
+                        <div className="text-sm font-bold text-teal-400/80 text-center py-4 bg-teal-500/5 rounded-xl border border-teal-500/10">🎉 أكدت تجنب جميع العادات السيئة!</div>
                       )}
                     </div>
                   </div>

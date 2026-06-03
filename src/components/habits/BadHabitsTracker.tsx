@@ -136,6 +136,16 @@ export function BadHabitsTracker({ habits, onResetStreak, onUndoRelapse }: Props
         msgs.forEach(m => mData[m.habit_id] = m.encrypted_message);
         setFutureMessages(mData);
       }
+      const { data: urges } = await supabase
+        .from('urge_levels')
+        .select('habit_id, urge_level')
+        .eq('user_id', userId);
+        
+      if (urges) {
+        const uData: Record<string, number> = {};
+        urges.forEach(u => uData[u.habit_id] = u.urge_level);
+        setUrgeLevels(prev => ({ ...prev, ...uData }));
+      }
     };
     fetchStates();
   }, []);
@@ -265,8 +275,21 @@ export function BadHabitsTracker({ habits, onResetStreak, onUndoRelapse }: Props
     }
   };
 
-  const handleUrgeChange = (habitId: string, val: number) => {
+  const handleUrgeChange = async (habitId: string, val: number) => {
     setUrgeLevels(p => ({ ...p, [habitId]: val }));
+    
+    const { data: authData } = await supabase.auth.getSession();
+    if (authData.session) {
+      // Upsert urge level to db (assuming a user only has one active urge log per habit, so we replace or update)
+      // Note: If you want to keep history you might want to only insert or add a unique constraint.
+      // But standard 'id' constraint is needed for upsert, or a unique pair.
+      // Let's just insert it to log history.
+      await supabase.from('urge_levels').insert({
+        user_id: authData.session.user.id,
+        habit_id: habitId,
+        urge_level: val
+      });
+    }
   };
 
   /* ── Global Stats ── */

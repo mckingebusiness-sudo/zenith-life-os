@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/useAuth";
 import AuthPage from "@/components/AuthPage";
 import { DirectionProvider } from "@/stores/useDirection";
 import { ThemeProvider } from "@/stores/useTheme";
+import { Toaster } from "@/components/ui/sonner";
 import "@/lib/i18n";
 
 function NotFoundComponent() {
@@ -167,6 +168,7 @@ function RootComponent() {
         <DirectionProvider>
           <AuthProvider>
             <AuthGate />
+            <Toaster position="bottom-center" />
           </AuthProvider>
         </DirectionProvider>
       </ThemeProvider>

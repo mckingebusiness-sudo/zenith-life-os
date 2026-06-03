@@ -47,7 +47,7 @@ export default function HabitsGarden() {
 
       <div className="flex items-baseline justify-between mb-5 relative z-10">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-bold text-foreground">حديقة العادات</h2>
+          <h2 className="text-base font-bold text-foreground">عادات</h2>
           <motion.span
             animate={{ rotate: [0, 12, -8, 0] }}
             transition={{ duration: 4, repeat: Infinity }}

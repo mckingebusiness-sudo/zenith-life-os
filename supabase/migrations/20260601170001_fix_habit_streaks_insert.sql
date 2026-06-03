@@ -1,6 +1,8 @@
 create or replace function public.initialize_habit_streak()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   insert into public.habit_streaks (habit_id, user_id, current_streak, longest_streak, total_checkins)

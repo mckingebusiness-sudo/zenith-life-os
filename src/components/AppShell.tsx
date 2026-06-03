@@ -5,6 +5,7 @@ import BackgroundFX from "./BackgroundFX";
 import AIPanel, { AITrigger } from "./AIFloatingButton";
 import { useDirection } from "@/stores/useDirection";
 import { useHabits } from "@/hooks/useHabits";
+import { toast } from "sonner";
 
 // ─── AppShell ──────────────────────────────────────────────────────────────
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -21,7 +22,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const draggingSidebar = useRef(false);
   const { dir } = useDirection();
-  const { addHabitAsync, deleteHabit, habits } = useHabits();
+  const { addHabitAsync, deleteHabit, updateHabitAsync, habits } = useHabits();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,24 +97,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
             open={aiOpen}
             onClose={() => setAiOpen(false)}
             onAddHabit={async (habit) => {
-              await addHabitAsync({
-                title: habit.title,
-                icon: habit.icon,
-                color: habit.color,
-                cadence: "daily",
-                target_per_period: 1,
-                sort_order: 0,
-                habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
-              });
-            }}
-            onDeleteHabit={async (title) => {
-              // Find by title (case-insensitive) from in-memory list
-              const found = habits.find((h) =>
-                h.title.toLowerCase().includes(title.toLowerCase())
-              );
-              if (found) {
-                await deleteHabit(found.id);
+              try {
+                const res = await addHabitAsync({
+                  title: habit.title,
+                  icon: habit.icon,
+                  color: habit.color,
+                  cadence: "daily",
+                  target_per_period: 1,
+                  sort_order: 0,
+                  habit_type: (habit.habit_type === 'quit' ? 'quit' : 'good') as any,
+                });
+                alert("DEBUG SUCCESS: " + JSON.stringify(res));
+              } catch (e: any) {
+                alert("خطأ أثناء الحفظ في الداتا بيز: " + (e.message || JSON.stringify(e)));
+                throw e;
               }
+            }}
+            onDeleteHabit={async (id) => {
+              await deleteHabit(id);
+            }}
+            onUpdateHabit={async (id, updates) => {
+              await updateHabitAsync(id, updates as any);
             }}
             side={sidebarSide}
           />

@@ -38,7 +38,7 @@ export function DailyMoodCheckIn() {
         .from('daily_moods')
         .select('id')
         .eq('user_id', userId)
-        .eq('date_local', todayStr)
+        .eq('day_local', todayStr)
         .single();
         
       if (!data && isMounted) {
@@ -60,14 +60,22 @@ export function DailyMoodCheckIn() {
     setSelectedMood(score);
     setIsProcessing(true);
     
+    const moodMap: Record<number, string> = {
+      1: 'tired',
+      2: 'sad',
+      3: 'neutral',
+      4: 'happy',
+      5: 'energetic'
+    };
+    
     const todayStr = new Date().toISOString().split("T")[0];
     const { data: authData } = await supabase.auth.getSession();
     if (authData.session) {
       await supabase.from('daily_moods').upsert({
         user_id: authData.session.user.id,
-        date_local: todayStr,
-        mood_score: score
-      }, { onConflict: 'user_id, date_local' });
+        day_local: todayStr,
+        mood: moodMap[score] || 'neutral'
+      }, { onConflict: 'user_id, day_local' });
     }
     
     // Simulate AI processing
